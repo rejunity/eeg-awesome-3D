@@ -15,7 +15,7 @@ export const PRESETS: Preset[] = [
     name: "Head + brain + raw electrodes",
     apply: (app) => {
       app.brainHead.setHeadVisible(true);
-      app.brainHead.setHeadOpacity(0.28);
+      app.brainHead.setCutaway(1.0); // full head, no cut
       app.brainHead.setBrainVisible(true);
       app.electrodes.setColorMode("redgreen");
       app.electrodes.setIndicatorsVisible(true);
@@ -27,7 +27,7 @@ export const PRESETS: Preset[] = [
     name: "Transparent head cutaway + electrodes",
     apply: (app) => {
       app.brainHead.setHeadVisible(true);
-      app.brainHead.setHeadOpacity(0.1);
+      app.brainHead.setCutaway(0.45); // top half cut away to reveal the brain
       app.brainHead.setBrainVisible(true);
       app.electrodes.setColorMode("redgreen");
       app.electrodes.setIndicatorsVisible(true);
@@ -51,7 +51,7 @@ export const PRESETS: Preset[] = [
     name: "EEG trace panel emphasis",
     apply: (app) => {
       app.brainHead.setHeadVisible(true);
-      app.brainHead.setHeadOpacity(0.18);
+      app.brainHead.setCutaway(0.7);
       app.electrodes.setColorMode("redgreen");
       app.showTrace();
       app.setAutoRotate(false);
@@ -73,7 +73,7 @@ export const PRESETS: Preset[] = [
     name: "FFT / band matrix",
     apply: (app) => {
       app.brainHead.setHeadVisible(true);
-      app.brainHead.setHeadOpacity(0.2);
+      app.brainHead.setCutaway(0.65);
       app.electrodes.setColorMode("band");
       app.showBands();
       app.setAutoRotate(false);
@@ -83,7 +83,7 @@ export const PRESETS: Preset[] = [
     name: "Installation / cinematic",
     apply: (app) => {
       app.brainHead.setHeadVisible(true);
-      app.brainHead.setHeadOpacity(0.22);
+      app.brainHead.setCutaway(0.9);
       app.brainHead.setBrainVisible(true);
       app.electrodes.setColorMode("redgreen");
       app.electrodes.setIndicatorsVisible(true);

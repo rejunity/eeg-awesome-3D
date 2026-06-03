@@ -2,9 +2,9 @@ import {
   Group,
   IcosahedronGeometry,
   Mesh,
-  MeshPhysicalMaterial,
   MeshStandardMaterial,
   SphereGeometry,
+  type IUniform,
 } from "three";
 
 /**
@@ -12,31 +12,47 @@ import {
  *
  * The real Unity assets (Realistic_White_Female_Head.obj, Realistic_Brain.fbx)
  * can be dropped in later as brain.glb / head.glb and loaded with GLTFLoader;
- * until then this gives the scene its shape: a translucent head ellipsoid with
- * an adjustable vertical cutaway (mirroring HumanHead.shader's _Cutoff) and a
- * brain-like inner mesh.
+ * until then this gives the scene its shape: an OPAQUE head ellipsoid with an
+ * alpha-cutout cutaway and a brain-like inner mesh.
+ *
+ * The head uses an alpha-cutout (discard) shader rather than transparency,
+ * mirroring the original Unity HumanHead.shader (`alphatest:_Cutoff`, with
+ * `alpha = -worldPos.y + sin(length(worldPos.xz))`). Fragments whose world Y is
+ * above a wavy cut plane are discarded, so the head stays a cheap opaque draw
+ * (no transmission/transparency render passes) while revealing the brain and
+ * inner electrodes as the cut descends. The cut height is driven by the up/down
+ * arrow keys (see controls/keyboard.ts).
  */
+
+// Head world-space Y extents (sphere radius 1 scaled by 1.12 in Y, plus margin).
+const CUT_TOP = 1.3; // cut at/above this -> whole head visible
+const CUT_BOTTOM = -1.25; // cut at/below this -> head fully discarded
+
 export class BrainHead {
   readonly group = new Group();
   readonly head: Mesh;
   readonly brain: Mesh;
-  private headMaterial: MeshPhysicalMaterial;
-  private cutoff = 1.2; // world Y above which the head fades out
+  private headMaterial: MeshStandardMaterial;
+  // Normalized cut control in [0, 1]: 1 = full head, 0 = fully cut away.
+  private cut = 1.0;
+  // Shared shader uniforms (wired in onBeforeCompile).
+  private cutUniforms: { uCutHeight: IUniform<number>; uCutWave: IUniform<number> } = {
+    uCutHeight: { value: CUT_TOP },
+    uCutWave: { value: 0.05 },
+  };
 
   constructor() {
-    // Head: slightly egg-shaped, translucent.
+    // Head: slightly egg-shaped, opaque, double-sided so the cutaway reveals
+    // the inner surface.
     const headGeo = new SphereGeometry(1.0, 64, 48);
     headGeo.scale(0.92, 1.12, 1.05);
-    this.headMaterial = new MeshPhysicalMaterial({
+    this.headMaterial = new MeshStandardMaterial({
       color: 0xd9c6b8,
       roughness: 0.85,
       metalness: 0.0,
-      transparent: true,
-      opacity: 0.28,
-      transmission: 0.2,
       side: 2, // DoubleSide
-      clipShadows: true,
     });
+    this._installCutShader(this.headMaterial);
     this.head = new Mesh(headGeo, this.headMaterial);
 
     // Brain: lumpy inner mesh.
@@ -55,6 +71,37 @@ export class BrainHead {
     this.group.add(this.head, this.brain);
   }
 
+  /**
+   * Inject a world-space vertical cutout into a standard material via
+   * onBeforeCompile: discard fragments above a wavy plane at uCutHeight.
+   */
+  private _installCutShader(material: MeshStandardMaterial): void {
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uCutHeight = this.cutUniforms.uCutHeight;
+      shader.uniforms.uCutWave = this.cutUniforms.uCutWave;
+
+      // Pass world position to the fragment shader.
+      shader.vertexShader = "varying vec3 vCutWorldPos;\n" + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <begin_vertex>",
+        "#include <begin_vertex>\n  vCutWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;",
+      );
+
+      // Discard above the (wavy) cut plane. The sin() term mirrors the Unity
+      // shader's `+ sin(length(worldPos.xz))` so the cut edge undulates.
+      shader.fragmentShader =
+        "varying vec3 vCutWorldPos;\nuniform float uCutHeight;\nuniform float uCutWave;\n" +
+        shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <clipping_planes_fragment>",
+        "#include <clipping_planes_fragment>\n" +
+          "  float cutLine = uCutHeight + uCutWave * sin(length(vCutWorldPos.xz) * 6.2831);\n" +
+          "  if (vCutWorldPos.y > cutLine) discard;",
+      );
+    };
+    material.needsUpdate = true;
+  }
+
   private _displace(geo: IcosahedronGeometry): void {
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
@@ -70,10 +117,20 @@ export class BrainHead {
     geo.computeVertexNormals();
   }
 
-  /** Head transparency 0..1 (preset control). */
-  setHeadOpacity(opacity: number): void {
-    this.headMaterial.opacity = Math.min(1, Math.max(0, opacity));
-    this.headMaterial.visible = this.headMaterial.opacity > 0.01;
+  /**
+   * Set the vertical cutaway. ``value`` is normalized [0, 1]:
+   * 1 = full head, 0 = head fully cut away (revealing the brain).
+   * Replaces the old opacity control — the head is opaque now.
+   */
+  setCutaway(value: number): void {
+    this.cut = Math.min(1, Math.max(0, value));
+    this.cutUniforms.uCutHeight.value =
+      CUT_BOTTOM + (CUT_TOP - CUT_BOTTOM) * this.cut;
+  }
+
+  /** Backwards-compatible alias: presets/GUI used to call setHeadOpacity. */
+  setHeadOpacity(value: number): void {
+    this.setCutaway(value);
   }
 
   setHeadVisible(visible: boolean): void {
@@ -84,13 +141,8 @@ export class BrainHead {
     this.brain.visible = visible;
   }
 
-  /** Adjust the vertical cutaway (arrow keys), echoing Unity's _Cutoff. */
+  /** Adjust the cutaway (arrow keys), echoing Unity's _Cutoff. */
   adjustCutoff(delta: number): void {
-    this.cutoff = Math.max(-0.5, Math.min(1.3, this.cutoff + delta));
-    // Approximate the cutaway by clipping head geometry above the plane.
-    this.headMaterial.clippingPlanes = null;
-    // Simple visual proxy: lower opacity as the cutaway descends.
-    const t = (this.cutoff + 0.5) / 1.8;
-    this.setHeadOpacity(0.05 + 0.3 * t);
+    this.setCutaway(this.cut + delta);
   }
 }

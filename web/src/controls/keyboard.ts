@@ -42,9 +42,10 @@ export function installKeyboard(app: App): void {
 
   window.addEventListener("keyup", (e) => held.delete(e.key));
 
-  // Arrow keys adjust the head cutaway continuously while held.
+  // Arrow keys adjust the head cutaway continuously while held:
+  // Up restores the head, Down slices it away from the top to reveal the brain.
   app.onTick(() => {
-    if (held.has("ArrowUp")) app.brainHead.adjustCutoff(-0.02);
-    if (held.has("ArrowDown")) app.brainHead.adjustCutoff(0.02);
+    if (held.has("ArrowUp")) app.brainHead.adjustCutoff(0.02);
+    if (held.has("ArrowDown")) app.brainHead.adjustCutoff(-0.02);
   });
 }

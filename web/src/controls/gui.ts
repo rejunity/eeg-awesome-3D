@@ -17,7 +17,7 @@ export function installGUI(app: App): GUI {
     display: "none",
     colorMode: "redgreen",
     band: "alpha",
-    headOpacity: 0.28,
+    headCutaway: 1.0,
     indicators: true,
     invertTrace: false,
     autoRotate: false,
@@ -48,9 +48,9 @@ export function installGUI(app: App): GUI {
     .onChange((b: string) => app.electrodes.setBand(b));
 
   gui
-    .add(state, "headOpacity", 0, 1, 0.01)
-    .name("Head opacity")
-    .onChange((v: number) => app.brainHead.setHeadOpacity(v));
+    .add(state, "headCutaway", 0, 1, 0.01)
+    .name("Head cutaway")
+    .onChange((v: number) => app.brainHead.setCutaway(v));
 
   gui
     .add(state, "indicators")
