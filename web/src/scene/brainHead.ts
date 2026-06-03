@@ -1,11 +1,14 @@
 import {
+  Box3,
   Group,
   IcosahedronGeometry,
   Mesh,
   MeshStandardMaterial,
   SphereGeometry,
+  Vector3,
   type IUniform,
 } from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 /**
  * Procedural head + brain fallback (PLAN.md "procedural fallback").
@@ -28,10 +31,16 @@ import {
 const CUT_TOP = 1.3; // cut at/above this -> whole head visible
 const CUT_BOTTOM = -1.25; // cut at/below this -> head fully discarded
 
+// Target max dimension (world units) the brain is scaled to so it fits inside
+// the head shell (head spans ~±0.92 / ±1.12 / ±1.05).
+const BRAIN_TARGET_SIZE = 1.25;
+
 export class BrainHead {
   readonly group = new Group();
   readonly head: Mesh;
-  readonly brain: Mesh;
+  // Container so we can swap the procedural placeholder for the loaded model.
+  readonly brain = new Group();
+  private brainMaterial: MeshStandardMaterial;
   private headMaterial: MeshStandardMaterial;
   // Normalized cut control in [0, 1]: 1 = full head, 0 = fully cut away.
   private cut = 1.0;
@@ -55,20 +64,66 @@ export class BrainHead {
     this._installCutShader(this.headMaterial);
     this.head = new Mesh(headGeo, this.headMaterial);
 
-    // Brain: lumpy inner mesh.
-    const brainGeo = new IcosahedronGeometry(0.62, 4);
-    this._displace(brainGeo);
-    const brainMat = new MeshStandardMaterial({
+    // Shared brain material (pinkish, slightly emissive) used by both the
+    // procedural fallback and the loaded model so the look stays consistent.
+    this.brainMaterial = new MeshStandardMaterial({
       color: 0xc98b9a,
       roughness: 0.6,
       metalness: 0.05,
       emissive: 0x3a1f28,
       emissiveIntensity: 0.4,
     });
-    this.brain = new Mesh(brainGeo, brainMat);
+
+    // Procedural lumpy fallback, shown immediately and replaced by the real
+    // model (Realistic_Brain.fbx -> brain.glb) once it loads.
+    const brainGeo = new IcosahedronGeometry(0.62, 4);
+    this._displace(brainGeo);
+    this.brain.add(new Mesh(brainGeo, this.brainMaterial));
     this.brain.position.y = -0.05;
 
     this.group.add(this.head, this.brain);
+    this._loadBrainModel();
+  }
+
+  /**
+   * Load the converted brain model and swap it in for the procedural fallback.
+   * The model is recentred to the origin and uniformly scaled to
+   * BRAIN_TARGET_SIZE, so it fits inside the head regardless of source units.
+   * On any error the procedural brain is left in place.
+   */
+  private _loadBrainModel(): void {
+    new GLTFLoader().load(
+      "models/brain.glb",
+      (gltf) => {
+        const model = gltf.scene;
+
+        const box = new Box3().setFromObject(model);
+        const size = box.getSize(new Vector3());
+        const center = box.getCenter(new Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        const scale = BRAIN_TARGET_SIZE / maxDim;
+
+        // v -> scale * (v - center): recentres the model's bounds on the origin.
+        model.scale.setScalar(scale);
+        model.position.set(
+          -center.x * scale,
+          -center.y * scale,
+          -center.z * scale,
+        );
+
+        model.traverse((obj) => {
+          const mesh = obj as Mesh;
+          if (mesh.isMesh) mesh.material = this.brainMaterial;
+        });
+
+        this.brain.clear();
+        this.brain.add(model);
+      },
+      undefined,
+      (err) => {
+        console.warn("brain.glb failed to load; using procedural brain", err);
+      },
+    );
   }
 
   /**
