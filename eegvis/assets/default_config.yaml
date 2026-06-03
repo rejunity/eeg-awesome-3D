@@ -1,0 +1,74 @@
+# Default runtime configuration for eegvis.
+# Override with a user YAML passed via `python -m eegvis run --config my.yaml`.
+# CLI flags take precedence over both.
+
+server:
+  host: 127.0.0.1
+  port: 8765
+  open_browser: true
+
+stream:
+  # Stream discovery filters. Leave name/source null to auto-pick.
+  type: EEG
+  name: null
+  source_id: null
+  # Prefer a stream whose name contains this substring when none is specified.
+  prefer_name_contains: cgx
+  # Seconds to wait for a stream before falling back / reporting.
+  resolve_timeout: 5.0
+  # Fall back to synthetic data if no stream is found (also set by --synthetic).
+  synthetic_fallback: false
+
+processing:
+  # Rate at which processed frames are broadcast to browsers.
+  output_hz: 30
+  # Rolling analysis window length in seconds.
+  rolling_window_seconds: 5.0
+  processors:
+    - name: bandpass
+      enabled: true
+      low_hz: 1.0
+      high_hz: 45.0
+      order: 4
+    - name: notch
+      enabled: false
+      hz: 50.0
+      quality: 30.0
+    - name: normalization
+      enabled: true
+      method: moving_minmax   # moving_minmax | zscore
+      reactivity: 0.9
+      expected_mean: 0.5
+      expected_variance: 0.25
+    - name: fft
+      enabled: true
+      window_seconds: 1.0
+      update_hz: 10
+      max_freq_hz: 45.0
+      max_channels: 32
+    - name: band_power
+      enabled: true
+      bands:
+        delta: [1, 4]
+        theta: [4, 8]
+        alpha: [8, 13]
+        beta: [13, 30]
+        gamma: [30, 45]
+    - name: smoothing
+      enabled: true
+      method: exponential
+      alpha: 0.25
+    - name: short_fourier
+      enabled: true
+      reactivity: 0.1
+      multiplier: 1.0
+      frequencies: [10, 20, 40]
+
+synthetic:
+  channel_count: 37        # match a CGX Quick32r stream
+  sample_rate: 250.0
+  # Sine components (Hz) mixed into every channel, plus per-channel phase offsets.
+  frequencies: [6, 10, 20, 40]
+  amplitudes: [1.0, 0.8, 0.5, 0.3]
+  noise: 0.15
+  blink_artifacts: true
