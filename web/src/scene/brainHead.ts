@@ -34,11 +34,14 @@ const CUT_BOTTOM = -1.25; // cut at/below this -> head fully discarded
 // Target max dimension (world units) the brain is scaled to so it fits inside
 // the head shell (head spans ~±0.92 / ±1.12 / ±1.05).
 const BRAIN_TARGET_SIZE = 1.25;
+// Target max dimension for the head model (its tallest axis ~ vertical extent),
+// matched to the electrode shell (~unit radius, so full height ~2.24).
+const HEAD_TARGET_SIZE = 2.24;
 
 export class BrainHead {
   readonly group = new Group();
-  readonly head: Mesh;
-  // Container so we can swap the procedural placeholder for the loaded model.
+  // Containers so we can swap the procedural placeholders for loaded models.
+  readonly head = new Group();
   readonly brain = new Group();
   private brainMaterial: MeshStandardMaterial;
   private headMaterial: MeshStandardMaterial;
@@ -62,7 +65,8 @@ export class BrainHead {
       side: 2, // DoubleSide
     });
     this._installCutShader(this.headMaterial);
-    this.head = new Mesh(headGeo, this.headMaterial);
+    // Procedural ellipsoid fallback, replaced by the real model once it loads.
+    this.head.add(new Mesh(headGeo, this.headMaterial));
 
     // Shared brain material (pinkish, slightly emissive) used by both the
     // procedural fallback and the loaded model so the look stays consistent.
@@ -82,7 +86,47 @@ export class BrainHead {
     this.brain.position.y = -0.05;
 
     this.group.add(this.head, this.brain);
+    this._loadHeadModel();
     this._loadBrainModel();
+  }
+
+  /**
+   * Load the converted head model (Realistic_White_Female_Head.obj -> head.glb,
+   * decimated) and swap it in for the procedural ellipsoid. Recentred to the
+   * origin and scaled to HEAD_TARGET_SIZE so it lines up with the electrode
+   * shell; the cut shader (headMaterial) is applied so the cutaway still works.
+   * If the model points the wrong way, flip with model.rotateY(Math.PI).
+   */
+  private _loadHeadModel(): void {
+    new GLTFLoader().load(
+      "models/head.glb",
+      (gltf) => {
+        const model = gltf.scene;
+        const box = new Box3().setFromObject(model);
+        const size = box.getSize(new Vector3());
+        const center = box.getCenter(new Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        const scale = HEAD_TARGET_SIZE / maxDim;
+
+        model.scale.setScalar(scale);
+        model.position.set(
+          -center.x * scale,
+          -center.y * scale,
+          -center.z * scale,
+        );
+        model.traverse((obj) => {
+          const mesh = obj as Mesh;
+          if (mesh.isMesh) mesh.material = this.headMaterial;
+        });
+
+        this.head.clear();
+        this.head.add(model);
+      },
+      undefined,
+      (err) => {
+        console.warn("head.glb failed to load; using procedural head", err);
+      },
+    );
   }
 
   /**
