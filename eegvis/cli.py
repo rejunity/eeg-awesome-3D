@@ -159,5 +159,48 @@ def inspect_stream(
     console.print(table)
 
 
+@app.command("fetch-sample")
+def fetch_sample(
+    subject: int = typer.Option(1, help="eegmmidb subject number."),
+    run: int = typer.Option(3, help="eegmmidb run number (e.g. 3 = a task run)."),
+) -> None:
+    """Download a public EEG recording and map it to the CGX channels.
+
+    Uses the PhysioNet EEG Motor Movement/Imagery DB (64-ch 10-10, 160 Hz),
+    saving a prepared .npz under ./recordings ready for `play-file`.
+    """
+    from .recordings.download import fetch_eegmmidb
+
+    console.print(f"Downloading eegmmidb S{subject:03d}R{run:02d} from PhysioNet…")
+    npz_path, prep = fetch_eegmmidb(subject=subject, run=run)
+    console.print(
+        f"[green]Prepared[/] {npz_path} — {prep.data.shape[0]} samples @ "
+        f"{prep.sample_rate:g} Hz, {len(prep.matched)}/{len(prep.channel_names)} "
+        f"CGX channels matched."
+    )
+    if prep.missing:
+        console.print(f"[yellow]Missing (zero-filled):[/] {', '.join(prep.missing)}")
+
+
+@app.command("play-file")
+def play_file(
+    path: Path = typer.Argument(..., help="Recording to replay (.edf or prepared .npz)."),
+    name: str = typer.Option("eegvis-replay", help="LSL stream name to advertise."),
+    loop: bool = typer.Option(True, help="Loop the recording when it ends."),
+) -> None:
+    """Replay a recording as an LSL EEG source (connect with `eegvis run`)."""
+    from .lsl.player import play_recording
+    from .lsl.discovery import LSLNotAvailable
+
+    console.print(f"Streaming [bold]{path}[/] as LSL stream '{name}' (Ctrl-C to stop)…")
+    try:
+        play_recording(path, name=name, loop=loop)
+    except LSLNotAvailable as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(code=1)
+    except KeyboardInterrupt:
+        console.print("\nStopped.")
+
+
 if __name__ == "__main__":
     app()

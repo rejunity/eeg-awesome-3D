@@ -165,3 +165,7 @@ cython_debug/
 *.DS_Store
 *.bdf
 *.mp4
+
+# Downloaded EEG recordings (fetched on demand) — repo-root data dir only,
+# not the eegvis/recordings source package.
+/recordings/
