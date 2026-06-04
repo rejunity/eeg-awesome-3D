@@ -32,9 +32,14 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 const CUT_TOP = 0.6; // cut at/above this -> whole head visible
 const CUT_BOTTOM = -3.3; // cut at/below this -> head fully discarded
 
-// Target max dimension (world units) the brain is scaled to so it fits inside
-// the head shell (head spans ~±0.92 / ±1.12 / ±1.05).
-const BRAIN_TARGET_SIZE = 1.25;
+// Brain placement, fitted anatomically INSIDE the fixed head (head world bbox
+// ~ x[-1.65,1.75], y[-3.25,0.47], z[-1.30,1.18]). The brain is scaled up to
+// fill the cranium (front-to-back nearly fills the skull depth), pitched so the
+// frontal lobe tilts down following the cranial base, and lowered so it nestles
+// in the upper skull with its crown just under the head's. All three are
+// tunable knobs — adjust against a screenshot.
+const BRAIN_SCALE = 1.6; // uniform scale of brain.glb (glb max dim ~1.32 -> ~2.1)
+const BRAIN_PITCH = 0.2; // radians about X (+ = frontal lobe tilts down)
 // Head placement, derived to match the head→brain relationship in the Unity
 // scene (`_CGX_Main_Scene.unity`), with the brain centred on the origin.
 //
@@ -54,6 +59,9 @@ const HEAD_SCALE_REL = 0.254; // uniform head scale (matches Unity head/brain ra
 // the brain so the brain sits high in the cranium and the face extends down,
 // exactly as in Unity. NB: per request this ignores electrode positions.
 const HEAD_CENTER = new Vector3(0.046, -1.388, -0.057);
+// Brain bbox centre in world space — inside the cranium of the fixed head, with
+// the crown just below the head's (head crown y≈0.47).
+const BRAIN_CENTER = new Vector3(0.05, -0.55, -0.05);
 
 export class BrainHead {
   readonly group = new Group();
@@ -97,10 +105,13 @@ export class BrainHead {
 
     // Procedural lumpy fallback, shown immediately and replaced by the real
     // model (Realistic_Brain.fbx -> brain.glb) once it loads.
-    const brainGeo = new IcosahedronGeometry(0.62, 4);
+    const brainGeo = new IcosahedronGeometry(0.95, 4);
     this._displace(brainGeo);
     this.brain.add(new Mesh(brainGeo, this.brainMaterial));
-    this.brain.position.y = -0.05;
+    // The brain group carries the anatomical placement (centre + pitch); the
+    // loaded model is recentred within it and scaled by BRAIN_SCALE.
+    this.brain.position.copy(BRAIN_CENTER);
+    this.brain.rotation.x = BRAIN_PITCH;
 
     this.group.add(this.head, this.brain);
     this._loadHeadModel();
@@ -155,9 +166,9 @@ export class BrainHead {
 
   /**
    * Load the converted brain model and swap it in for the procedural fallback.
-   * The model is recentred to the origin and uniformly scaled to
-   * BRAIN_TARGET_SIZE, so it fits inside the head regardless of source units.
-   * On any error the procedural brain is left in place.
+   * The model is recentred within the brain group and uniformly scaled by
+   * BRAIN_SCALE; the group then applies the anatomical centre + pitch so the
+   * brain sits inside the cranium. On any error the procedural brain remains.
    */
   private _loadBrainModel(): void {
     new GLTFLoader().load(
@@ -166,12 +177,11 @@ export class BrainHead {
         const model = gltf.scene;
 
         const box = new Box3().setFromObject(model);
-        const size = box.getSize(new Vector3());
         const center = box.getCenter(new Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z) || 1;
-        const scale = BRAIN_TARGET_SIZE / maxDim;
+        const scale = BRAIN_SCALE;
 
-        // v -> scale * (v - center): recentres the model's bounds on the origin.
+        // v -> scale * (v - center): recentres the model on the group origin so
+        // the group's position/pitch place it anatomically inside the head.
         model.scale.setScalar(scale);
         model.position.set(
           -center.x * scale,
