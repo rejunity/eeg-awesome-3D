@@ -57,6 +57,25 @@ Quick20r (19 EEG), **37 channels** → Quick32r (29 EEG). Non-EEG channels
 processors. If no stream is found the app reports it clearly and keeps retrying;
 add `--synthetic` to fall back to synthetic data.
 
+The server exits a few seconds after you close the browser tab (the last
+WebSocket client disconnects). Page reloads reconnect within the grace window
+and keep it running; `--no-browser`/headless runs stay up. Disable with
+`exit_on_browser_close: false` in config.
+
+## Replaying real recordings (no hardware)
+
+You can replay a real public EEG recording as an LSL source:
+
+```bash
+python -m eegvis fetch-sample            # download + prepare a PhysioNet recording
+python -m eegvis play-file recordings/S001R03_cgx.npz   # stream it over LSL
+python -m eegvis run                     # in another terminal: connect to it
+```
+
+`play-file` also accepts a raw `.edf` directly. Data provenance, the channel
+mapping onto the CGX montage, and a survey of other public datasets are in
+[docs/recordings.md](docs/recordings.md).
+
 ### CLI reference
 
 ```bash
