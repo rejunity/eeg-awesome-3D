@@ -28,24 +28,32 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
  */
 
 // Head world-space Y extents (sphere radius 1 scaled by 1.12 in Y, plus margin).
-const CUT_TOP = 1.3; // cut at/above this -> whole head visible
-const CUT_BOTTOM = -1.25; // cut at/below this -> head fully discarded
+// Cutaway range in world Y, matched to the head's extent (~[-3.25, 0.47]).
+const CUT_TOP = 0.6; // cut at/above this -> whole head visible
+const CUT_BOTTOM = -3.3; // cut at/below this -> head fully discarded
 
 // Target max dimension (world units) the brain is scaled to so it fits inside
 // the head shell (head spans ~±0.92 / ±1.12 / ±1.05).
 const BRAIN_TARGET_SIZE = 1.25;
-// Head placement, expressed relative to the electrode shell (the normalized
-// electrode positions sit on a ~unit-radius sphere centred on the anatomical
-// brain centre = the scene origin, with Cz at the vertex ~y=1.0).
+// Head placement, derived to match the head→brain relationship in the Unity
+// scene (`_CGX_Main_Scene.unity`), with the brain centred on the origin.
 //
-// In Unity the electrodes were raycast onto the skull surface; here we instead
-// fit the head so its cranium wraps the electrode cap: scale uniformly so the
-// mean horizontal radius matches the electrode radius, and anchor the top of
-// the skull just above Cz. This drops the head so the brain (centred on the
-// origin) sits up in the cranium, as it did in the Unity scene — rather than
-// floating at mid-face.
-const HEAD_SHELL_RADIUS = 1.05; // mean horizontal scalp radius (electrodes ~1.0)
-const HEAD_VERTEX_Y = 1.08; // world Y the top of the skull is anchored to
+// Reconstructed from the Unity prefab transforms + model import scales:
+//   head:  pos (0,-57.85,0), rot 180°Y, scale 1   (OBJ, globalScale 1)
+//   brain: pos (-0.15,6.5,0.14), rot ~180°Y, scale 0.54  (FBX, globalScale 1000)
+// The FBX asset scale (k≈6) is the one value not directly readable from the
+// scene; it's pinned by the brain crown meeting the skull crown (consistent
+// with the Unity render). From those world bounding boxes, the head centre sits
+// at this offset from the brain centre (in brain-size units) and the head is
+// this many times the brain's size:
+//   head_centre - brain_centre = (0.046, -1.301, -0.046) * brain_size
+//   head_size / brain_size (height) = 3.488
+// Applied to our origin-centred brain (BRAIN_TARGET_SIZE) these become:
+const HEAD_SCALE_REL = 0.254; // uniform head scale (matches Unity head/brain ratio)
+// Head bbox centre in world space (brain centre = origin). The head drops below
+// the brain so the brain sits high in the cranium and the face extends down,
+// exactly as in Unity. NB: per request this ignores electrode positions.
+const HEAD_CENTER = new Vector3(0.046, -1.388, -0.057);
 
 export class BrainHead {
   readonly group = new Group();
@@ -112,23 +120,16 @@ export class BrainHead {
       (gltf) => {
         const model = gltf.scene;
         const box = new Box3().setFromObject(model);
-        const size = box.getSize(new Vector3());
         const center = box.getCenter(new Vector3());
 
-        // Scale so the mean horizontal radius (ear-to-ear & front-to-back)
-        // matches the electrode shell; this compromises between the head being
-        // wider than deep and the spherical electrode cap.
-        const meanHorizRadius = (size.x + size.z) / 4 || 1;
-        const scale = HEAD_SHELL_RADIUS / meanHorizRadius;
-
+        // Unity-derived uniform scale and placement relative to the brain.
+        const scale = HEAD_SCALE_REL;
         model.scale.setScalar(scale);
-        // Centre horizontally on the origin; anchor the skull top to the vertex
-        // so the cranium descends over the electrode cap and the brain sits high
-        // inside it (matching the Unity placement).
+        // Position so the head's bbox centre lands at HEAD_CENTER.
         model.position.set(
-          -center.x * scale,
-          HEAD_VERTEX_Y - box.max.y * scale,
-          -center.z * scale,
+          HEAD_CENTER.x - center.x * scale,
+          HEAD_CENTER.y - center.y * scale,
+          HEAD_CENTER.z - center.z * scale,
         );
         model.traverse((obj) => {
           const mesh = obj as Mesh;
