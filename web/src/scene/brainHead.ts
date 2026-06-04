@@ -34,9 +34,18 @@ const CUT_BOTTOM = -1.25; // cut at/below this -> head fully discarded
 // Target max dimension (world units) the brain is scaled to so it fits inside
 // the head shell (head spans ~±0.92 / ±1.12 / ±1.05).
 const BRAIN_TARGET_SIZE = 1.25;
-// Target max dimension for the head model (its tallest axis ~ vertical extent),
-// matched to the electrode shell (~unit radius, so full height ~2.24).
-const HEAD_TARGET_SIZE = 2.24;
+// Head placement, expressed relative to the electrode shell (the normalized
+// electrode positions sit on a ~unit-radius sphere centred on the anatomical
+// brain centre = the scene origin, with Cz at the vertex ~y=1.0).
+//
+// In Unity the electrodes were raycast onto the skull surface; here we instead
+// fit the head so its cranium wraps the electrode cap: scale uniformly so the
+// mean horizontal radius matches the electrode radius, and anchor the top of
+// the skull just above Cz. This drops the head so the brain (centred on the
+// origin) sits up in the cranium, as it did in the Unity scene — rather than
+// floating at mid-face.
+const HEAD_SHELL_RADIUS = 1.05; // mean horizontal scalp radius (electrodes ~1.0)
+const HEAD_VERTEX_Y = 1.08; // world Y the top of the skull is anchored to
 
 export class BrainHead {
   readonly group = new Group();
@@ -105,18 +114,32 @@ export class BrainHead {
         const box = new Box3().setFromObject(model);
         const size = box.getSize(new Vector3());
         const center = box.getCenter(new Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z) || 1;
-        const scale = HEAD_TARGET_SIZE / maxDim;
+
+        // Scale so the mean horizontal radius (ear-to-ear & front-to-back)
+        // matches the electrode shell; this compromises between the head being
+        // wider than deep and the spherical electrode cap.
+        const meanHorizRadius = (size.x + size.z) / 4 || 1;
+        const scale = HEAD_SHELL_RADIUS / meanHorizRadius;
 
         model.scale.setScalar(scale);
+        // Centre horizontally on the origin; anchor the skull top to the vertex
+        // so the cranium descends over the electrode cap and the brain sits high
+        // inside it (matching the Unity placement).
         model.position.set(
           -center.x * scale,
-          -center.y * scale,
+          HEAD_VERTEX_Y - box.max.y * scale,
           -center.z * scale,
         );
         model.traverse((obj) => {
           const mesh = obj as Mesh;
-          if (mesh.isMesh) mesh.material = this.headMaterial;
+          if (mesh.isMesh) {
+            mesh.material = this.headMaterial;
+            // The decimated head scan ships without normals; compute smooth
+            // normals from the (welded) geometry so it lights correctly.
+            if (!mesh.geometry.getAttribute("normal")) {
+              mesh.geometry.computeVertexNormals();
+            }
+          }
         });
 
         this.head.clear();
