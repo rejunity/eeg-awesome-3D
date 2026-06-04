@@ -6,6 +6,10 @@ server:
   host: 127.0.0.1
   port: 8765
   open_browser: true
+  # Exit when the browser tab closes (last WebSocket client disconnects and
+  # doesn't reconnect within idle_shutdown_grace seconds).
+  exit_on_browser_close: true
+  idle_shutdown_grace: 3.0
 
 stream:
   # Stream discovery filters. Leave name/source null to auto-pick.

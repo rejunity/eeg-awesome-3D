@@ -24,6 +24,12 @@ class ServerConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8765
     open_browser: bool = True
+    # Shut the server down shortly after the browser tab is closed (i.e. the
+    # last WebSocket client disconnects and doesn't reconnect within the grace
+    # period). Only arms after the first client has connected, so headless /
+    # --no-browser runs stay up.
+    exit_on_browser_close: bool = True
+    idle_shutdown_grace: float = 3.0
 
 
 class StreamConfig(BaseModel):

@@ -31,14 +31,19 @@ from .websocket import ConnectionManager
 def create_app(config: AppConfig, synthetic: bool = False) -> FastAPI:
     manager = ConnectionManager()
     engine = Engine(config, manager, synthetic=synthetic)
+    shutdown = IdleShutdown(config, manager)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await engine.start()
         status_task = asyncio.create_task(_status_broadcaster(engine))
+        # The uvicorn server is attached by the CLI (app.state.uvicorn_server)
+        # so idle-shutdown can ask it to exit. Absent in tests -> no-op.
+        shutdown.server = getattr(app.state, "uvicorn_server", None)
         try:
             yield
         finally:
+            shutdown.cancel()
             status_task.cancel()
             with suppress(asyncio.CancelledError):
                 await status_task
@@ -47,6 +52,7 @@ def create_app(config: AppConfig, synthetic: bool = False) -> FastAPI:
     app = FastAPI(title="eegvis", lifespan=lifespan)
     app.state.engine = engine
     app.state.config = config
+    app.state.uvicorn_server = None  # set by the CLI before server.run()
 
     @app.get("/api/status")
     async def api_status() -> JSONResponse:
@@ -72,6 +78,7 @@ def create_app(config: AppConfig, synthetic: bool = False) -> FastAPI:
     @app.websocket("/ws/eeg")
     async def ws_eeg(ws: WebSocket) -> None:
         await manager.connect(ws)
+        shutdown.on_connect()
         # Send current status immediately on connect.
         await manager.send_json(ws, engine.status.model_dump())
         if engine.latest_frame is not None:
@@ -85,6 +92,7 @@ def create_app(config: AppConfig, synthetic: bool = False) -> FastAPI:
             pass
         finally:
             await manager.disconnect(ws)
+            shutdown.on_disconnect()
 
     # Serve frontend last so /api and /ws take precedence.
     if frontend_built():
@@ -97,6 +105,51 @@ def create_app(config: AppConfig, synthetic: bool = False) -> FastAPI:
             )
 
     return app
+
+
+class IdleShutdown:
+    """Stop the server shortly after the browser tab closes.
+
+    Arms only once a client has connected (so startup / --no-browser headless
+    runs don't exit prematurely). When the last client disconnects, waits
+    ``idle_shutdown_grace`` seconds; if no client reconnects in that window
+    (a page reload reconnects almost immediately), asks uvicorn to exit.
+    """
+
+    def __init__(self, config: AppConfig, manager: ConnectionManager):
+        self.config = config
+        self.manager = manager
+        self.server = None  # uvicorn.Server, attached in lifespan
+        self._had_client = False
+        self._pending: asyncio.Task | None = None
+
+    def on_connect(self) -> None:
+        self._had_client = True
+        if self._pending is not None:
+            self._pending.cancel()
+            self._pending = None
+
+    def on_disconnect(self) -> None:
+        if not self.config.server.exit_on_browser_close:
+            return
+        if not self._had_client or self.manager.client_count > 0:
+            return
+        if self._pending is None or self._pending.done():
+            self._pending = asyncio.create_task(self._wait_then_exit())
+
+    async def _wait_then_exit(self) -> None:
+        try:
+            await asyncio.sleep(self.config.server.idle_shutdown_grace)
+        except asyncio.CancelledError:
+            return
+        # Still no clients after the grace period -> shut down.
+        if self.manager.client_count == 0 and self.server is not None:
+            self.server.should_exit = True
+
+    def cancel(self) -> None:
+        if self._pending is not None:
+            self._pending.cancel()
+            self._pending = None
 
 
 async def _status_broadcaster(engine: Engine, interval: float = 2.0) -> None:

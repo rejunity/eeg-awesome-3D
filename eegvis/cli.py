@@ -84,7 +84,17 @@ def run(
         _open_browser_when_ready(url)
 
     fastapi_app = create_app(config, synthetic=synthetic)
-    uvicorn.run(fastapi_app, host=config.server.host, port=config.server.port, log_level="warning")
+    # Build the server explicitly (rather than uvicorn.run) so the app can ask
+    # it to exit when the browser tab closes (see IdleShutdown).
+    uv_config = uvicorn.Config(
+        fastapi_app,
+        host=config.server.host,
+        port=config.server.port,
+        log_level="warning",
+    )
+    server = uvicorn.Server(uv_config)
+    fastapi_app.state.uvicorn_server = server
+    server.run()
 
 
 def _open_browser_when_ready(url: str, delay: float = 1.0) -> None:
