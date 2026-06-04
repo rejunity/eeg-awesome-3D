@@ -1,6 +1,7 @@
 import GUI from "lil-gui";
 import type { App } from "../app";
 import { PRESETS } from "../scene/presets";
+import { BrainHead } from "../scene/brainHead";
 
 const BANDS = ["delta", "theta", "alpha", "beta", "gamma"];
 
@@ -22,6 +23,9 @@ export function installGUI(app: App): GUI {
     invertTrace: false,
     autoRotate: false,
     debugElectrode: "(none)",
+    brainScale: BrainHead.defaults.brainScale,
+    brainPitch: BrainHead.defaults.brainPitch,
+    electrodePitch: 0,
   };
 
   gui
@@ -78,6 +82,21 @@ export function installGUI(app: App): GUI {
         app.electrodes.setDebugElectrode(n === "(none)" ? null : n),
       );
   });
+
+  // Anatomy: tune the brain fit and electrode-array pitch at runtime.
+  const anatomy = gui.addFolder("Anatomy");
+  anatomy
+    .add(state, "brainScale", 0.5, 3.0, 0.01)
+    .name("Brain scale")
+    .onChange((v: number) => app.brainHead.setBrainScale(v));
+  anatomy
+    .add(state, "brainPitch", -0.8, 0.8, 0.01)
+    .name("Brain pitch (rad)")
+    .onChange((v: number) => app.brainHead.setBrainPitch(v));
+  anatomy
+    .add(state, "electrodePitch", -0.8, 0.8, 0.01)
+    .name("Electrode pitch (rad)")
+    .onChange((v: number) => app.setElectrodePitch(v));
 
   app.guiState = state;
   return gui;

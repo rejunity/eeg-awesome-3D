@@ -1,4 +1,4 @@
-import { Clock } from "three";
+import { Clock, Group } from "three";
 import { createScene, type SceneContext } from "./scene/createScene";
 import { BrainHead } from "./scene/brainHead";
 import { Electrodes } from "./scene/electrodes";
@@ -28,6 +28,9 @@ export class App {
   bands = new BandTexture();
   panel = new DisplayPanel();
 
+  // Pivot for the electrode array, placed at the brain centre so the whole
+  // array can be pitched around it (see setElectrodePitch).
+  private electrodePivot = new Group();
   private socket = new EEGSocket();
   private clock = new Clock();
   private tickHandlers: Array<(dt: number) => void> = [];
@@ -56,7 +59,14 @@ export class App {
     const res = await fetch("/api/electrodes");
     const data: ElectrodeResponse = await res.json();
     this.electrodes = new Electrodes(data.electrodes);
-    this.ctx.scene.add(this.electrodes.group);
+    // Mount the array under a pivot at the brain centre and offset it by the
+    // same amount, so the electrodes keep their world positions but rotating
+    // the pivot spins the whole array around the brain centre.
+    const center = this.brainHead.brainCenter;
+    this.electrodePivot.position.copy(center);
+    this.electrodes.group.position.copy(center.clone().negate());
+    this.electrodePivot.add(this.electrodes.group);
+    this.ctx.scene.add(this.electrodePivot);
     for (const h of this.electrodesReadyHandlers) h(this.electrodes.channelNames);
   }
 
@@ -138,6 +148,11 @@ export class App {
   setAutoRotate(on: boolean): void {
     this.autoRotate = on;
     if (this.guiState) this.guiState.autoRotate = on;
+  }
+
+  /** Pitch the whole electrode array (radians) about the brain centre. */
+  setElectrodePitch(radians: number): void {
+    this.electrodePivot.rotation.x = radians;
   }
 
   // -- hooks ---------------------------------------------------------------

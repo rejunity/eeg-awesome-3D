@@ -105,13 +105,16 @@ export class BrainHead {
 
     // Procedural lumpy fallback, shown immediately and replaced by the real
     // model (Realistic_Brain.fbx -> brain.glb) once it loads.
-    const brainGeo = new IcosahedronGeometry(0.95, 4);
+    const brainGeo = new IcosahedronGeometry(0.66, 4);
     this._displace(brainGeo);
     this.brain.add(new Mesh(brainGeo, this.brainMaterial));
-    // The brain group carries the anatomical placement (centre + pitch); the
-    // loaded model is recentred within it and scaled by BRAIN_SCALE.
+    // The brain group carries the anatomical placement: position = centre,
+    // rotation.x = pitch, scale = BRAIN_SCALE. The loaded model is recentred on
+    // the group origin so scale/pitch act about the brain centre. Scale and
+    // pitch live on the group so they can be tweaked at runtime (GUI).
     this.brain.position.copy(BRAIN_CENTER);
     this.brain.rotation.x = BRAIN_PITCH;
+    this.brain.scale.setScalar(BRAIN_SCALE);
 
     this.group.add(this.head, this.brain);
     this._loadHeadModel();
@@ -178,16 +181,10 @@ export class BrainHead {
 
         const box = new Box3().setFromObject(model);
         const center = box.getCenter(new Vector3());
-        const scale = BRAIN_SCALE;
 
-        // v -> scale * (v - center): recentres the model on the group origin so
-        // the group's position/pitch place it anatomically inside the head.
-        model.scale.setScalar(scale);
-        model.position.set(
-          -center.x * scale,
-          -center.y * scale,
-          -center.z * scale,
-        );
+        // Recentre the model on the group origin (scale 1); the brain group
+        // applies position/pitch/scale so they all act about the brain centre.
+        model.position.set(-center.x, -center.y, -center.z);
 
         model.traverse((obj) => {
           const mesh = obj as Mesh;
@@ -269,6 +266,27 @@ export class BrainHead {
   setHeadVisible(visible: boolean): void {
     this.head.visible = visible;
   }
+
+  /** Runtime brain scale (uniform), about the brain centre. */
+  setBrainScale(scale: number): void {
+    this.brain.scale.setScalar(scale);
+  }
+
+  /** Runtime brain pitch in radians (about X, through the brain centre). */
+  setBrainPitch(radians: number): void {
+    this.brain.rotation.x = radians;
+  }
+
+  /** World-space brain centre (pivot for the brain and the electrode array). */
+  get brainCenter(): Vector3 {
+    return this.brain.position.clone();
+  }
+
+  /** Default knob values, so the GUI can initialise its sliders. */
+  static readonly defaults = {
+    brainScale: BRAIN_SCALE,
+    brainPitch: BRAIN_PITCH,
+  };
 
   setBrainVisible(visible: boolean): void {
     this.brain.visible = visible;
