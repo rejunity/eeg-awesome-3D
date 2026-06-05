@@ -32,6 +32,12 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 // Cutaway range in world Y, matched to the head's extent (~[-3.25, 0.47]).
 const CUT_TOP = 0.6; // cut at/above this -> whole head visible
 const CUT_BOTTOM = -3.3; // cut at/below this -> head fully discarded
+const DEFAULT_CUTAWAY = 0.72; // initial cutaway (1 = full head, 0 = fully cut)
+
+// Render layer used for the electrode point lights. Putting the brain (and the
+// electrode markers) on this layer while leaving the head off it lets the head
+// be excluded from the electrode lights (see App.setHeadLitByElectrodes).
+export const ELECTRODE_LIGHT_LAYER = 1;
 
 // Brain placement, fitted anatomically INSIDE the fixed head (head world bbox
 // ~ x[-1.65,1.75], y[-3.25,0.47], z[-1.30,1.18]). The brain is scaled up to
@@ -75,12 +81,12 @@ export class BrainHead {
   private brainMaterial: MeshStandardMaterial;
   private headMaterial: MeshStandardMaterial;
   // Normalized cut control in [0, 1]: 1 = full head, 0 = fully cut away.
-  private cut = 1.0;
+  private cut = DEFAULT_CUTAWAY;
   private headLoaded = false;
   private headReadyHandlers: Array<() => void> = [];
   // Shared shader uniforms (wired in onBeforeCompile).
   private cutUniforms: { uCutHeight: IUniform<number>; uCutWave: IUniform<number> } = {
-    uCutHeight: { value: CUT_TOP },
+    uCutHeight: { value: CUT_BOTTOM + (CUT_TOP - CUT_BOTTOM) * DEFAULT_CUTAWAY },
     uCutWave: { value: 0.05 },
   };
 
@@ -113,7 +119,9 @@ export class BrainHead {
     // model (Realistic_Brain.fbx -> brain.glb) once it loads.
     const brainGeo = new IcosahedronGeometry(0.66, 4);
     this._displace(brainGeo);
-    this.brain.add(new Mesh(brainGeo, this.brainMaterial));
+    const brainMesh = new Mesh(brainGeo, this.brainMaterial);
+    brainMesh.layers.enable(ELECTRODE_LIGHT_LAYER); // lit by electrode lights
+    this.brain.add(brainMesh);
     // The brain group carries the anatomical placement: position = centre,
     // rotation.x = pitch, scale = BRAIN_SCALE. The loaded model is recentred on
     // the group origin so scale/pitch act about the brain centre. Scale and
@@ -199,7 +207,10 @@ export class BrainHead {
 
         model.traverse((obj) => {
           const mesh = obj as Mesh;
-          if (mesh.isMesh) mesh.material = this.brainMaterial;
+          if (mesh.isMesh) {
+            mesh.material = this.brainMaterial;
+            mesh.layers.enable(ELECTRODE_LIGHT_LAYER); // lit by electrode lights
+          }
         });
 
         this.brain.clear();
@@ -308,6 +319,7 @@ export class BrainHead {
   static readonly defaults = {
     brainScale: BRAIN_SCALE,
     brainPitch: BRAIN_PITCH,
+    cutaway: DEFAULT_CUTAWAY,
   };
 
   setBrainVisible(visible: boolean): void {

@@ -15,6 +15,7 @@ import {
 } from "three";
 import type { ElectrodeMeta } from "../net/protocol";
 import { redGreen, BAND_COLORS } from "./colormap";
+import { ELECTRODE_LIGHT_LAYER } from "./brainHead";
 
 interface ElectrodeNode {
   name: string;
@@ -66,6 +67,9 @@ export class Electrodes {
         roughness: 0.4,
       });
       const mesh = new Mesh(this.sphereGeo, material);
+      // Markers are on the electrode-light layer too, so they stay lit when the
+      // electrode lights are moved off the head's layer.
+      mesh.layers.enable(ELECTRODE_LIGHT_LAYER);
       const nominal = new Vector3(...meta.position).multiplyScalar(1.04);
       mesh.position.copy(nominal);
 
@@ -102,6 +106,15 @@ export class Electrodes {
 
   setDebugElectrode(name: string | null): void {
     this.debugElectrode = name ? normalize(name) : null;
+  }
+
+  /**
+   * Put the electrode point lights on a single render layer. With the head off
+   * that layer (and the brain/markers on it), the lights stop illuminating the
+   * head while still glowing the brain and markers.
+   */
+  setLightLayer(layer: number): void {
+    for (const n of this.nodes.values()) n.light.layers.set(layer);
   }
 
   setShape(shape: ElectrodeShape): void {

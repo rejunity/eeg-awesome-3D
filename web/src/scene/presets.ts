@@ -15,7 +15,7 @@ export const PRESETS: Preset[] = [
     name: "Head + brain + raw electrodes",
     apply: (app) => {
       app.brainHead.setHeadVisible(true);
-      app.brainHead.setCutaway(1.0); // full head, no cut
+      app.brainHead.setCutaway(0.72); // default cutaway, brain peeking through
       app.brainHead.setBrainVisible(true);
       app.electrodes.setColorMode("redgreen");
       app.electrodes.setIndicatorsVisible(true);

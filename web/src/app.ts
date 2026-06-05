@@ -1,6 +1,6 @@
 import { Clock } from "three";
 import { createScene, type SceneContext } from "./scene/createScene";
-import { BrainHead } from "./scene/brainHead";
+import { BrainHead, ELECTRODE_LIGHT_LAYER } from "./scene/brainHead";
 import { Electrodes, type ElectrodeShape } from "./scene/electrodes";
 import { EEGTraceTexture } from "./scene/eegTraceTexture";
 import { BandTexture } from "./scene/bandTexture";
@@ -45,6 +45,8 @@ export class App {
     height: -0.45,
     distance: 0.04,
     shape: "sphere" as ElectrodeShape,
+    // false = head is NOT lit by the electrode point lights (brain still is).
+    headLit: false,
   };
   private electrodePitch = this.electrodeDefaults.pitch;
   private electrodeHeight = this.electrodeDefaults.height;
@@ -72,6 +74,7 @@ export class App {
     const data: ElectrodeResponse = await res.json();
     this.electrodes = new Electrodes(data.electrodes);
     this.electrodes.setShape(this.electrodeShape);
+    this.setHeadLitByElectrodes(this.electrodeDefaults.headLit);
     this.ctx.scene.add(this.electrodes.group);
     // Project electrodes onto the head surface once the head model is ready,
     // and again whenever an electrode control changes (see projectElectrodes).
@@ -185,6 +188,15 @@ export class App {
     this.electrodeShape = shape;
     this.electrodes?.setShape(shape);
     this.projectElectrodes();
+  }
+
+  /**
+   * Toggle whether the electrode point lights illuminate the head. When off,
+   * the lights are moved to a dedicated render layer that the head isn't on
+   * (the brain and markers are), so only the head is excluded.
+   */
+  setHeadLitByElectrodes(on: boolean): void {
+    this.electrodes?.setLightLayer(on ? 0 : ELECTRODE_LIGHT_LAYER);
   }
 
   /** Raycast every electrode onto the head surface with the current params. */

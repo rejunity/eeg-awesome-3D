@@ -19,7 +19,7 @@ export function installGUI(app: App): GUI {
     display: "none",
     colorMode: "redgreen",
     band: "alpha",
-    headCutaway: 1.0,
+    headCutaway: BrainHead.defaults.cutaway,
     indicators: true,
     invertTrace: false,
     autoRotate: false,
@@ -30,6 +30,7 @@ export function installGUI(app: App): GUI {
     electrodeHeight: app.electrodeDefaults.height,
     electrodeDistance: app.electrodeDefaults.distance,
     electrodeShape: app.electrodeDefaults.shape,
+    headLitByElectrodes: app.electrodeDefaults.headLit,
   };
 
   gui
@@ -113,6 +114,10 @@ export function installGUI(app: App): GUI {
     .add(state, "electrodeShape", ["sphere", "cone"])
     .name("Electrode shape")
     .onChange((v: string) => app.setElectrodeShape(v as ElectrodeShape));
+  anatomy
+    .add(state, "headLitByElectrodes")
+    .name("Head lit by electrodes")
+    .onChange((v: boolean) => app.setHeadLitByElectrodes(v));
 
   app.guiState = state;
   return gui;
