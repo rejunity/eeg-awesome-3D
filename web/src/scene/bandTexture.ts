@@ -31,6 +31,11 @@ export class BandTexture {
     this.texture.magFilter = NearestFilter;
   }
 
+  /** The backing canvas, for displaying the panel as a 2D DOM overlay. */
+  get domElement(): HTMLCanvasElement {
+    return this.canvas;
+  }
+
   setMode(mode: BandMode): void {
     this.mode = mode;
   }

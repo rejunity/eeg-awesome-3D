@@ -1,10 +1,9 @@
 import { Clock } from "three";
 import { createScene, type SceneContext } from "./scene/createScene";
-import { BrainHead, ELECTRODE_LIGHT_LAYER } from "./scene/brainHead";
+import { BrainHead } from "./scene/brainHead";
 import { Electrodes, type ElectrodeShape } from "./scene/electrodes";
 import { EEGTraceTexture } from "./scene/eegTraceTexture";
 import { BandTexture } from "./scene/bandTexture";
-import { DisplayPanel } from "./scene/displayPanel";
 import { PRESETS } from "./scene/presets";
 import { EEGSocket } from "./net/websocket";
 import type {
@@ -26,7 +25,8 @@ export class App {
   electrodes!: Electrodes;
   trace = new EEGTraceTexture();
   bands = new BandTexture();
-  panel = new DisplayPanel();
+  // 2D HUD overlay (top quarter of the screen) for the trace/band/FFT panels.
+  private displayOverlay!: HTMLDivElement;
 
   private socket = new EEGSocket();
   private clock = new Clock();
@@ -59,7 +59,42 @@ export class App {
   constructor(container: HTMLElement) {
     this.ctx = createScene(container);
     this.ctx.scene.add(this.brainHead.group);
-    this.ctx.scene.add(this.panel.mesh);
+    this._buildDisplayOverlay(container);
+  }
+
+  /**
+   * Build the 2D display overlay: a top-quarter-of-screen HUD that shows the
+   * trace / band / FFT canvases on top of the 3D scene (not a 3D plane).
+   */
+  private _buildDisplayOverlay(container: HTMLElement): void {
+    const overlay = document.createElement("div");
+    Object.assign(overlay.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      width: "100vw",
+      height: "25vh",
+      zIndex: "5", // above the canvas, below the HUD text / GUI
+      pointerEvents: "none",
+      overflow: "hidden",
+      display: "none",
+      borderBottom: "1px solid rgba(255,255,255,0.12)",
+      background: "rgba(5,7,13,0.35)",
+    } as CSSStyleDeclaration);
+
+    for (const canvas of [this.trace.domElement, this.bands.domElement]) {
+      Object.assign(canvas.style, {
+        position: "absolute",
+        inset: "0",
+        width: "100%",
+        height: "100%",
+        display: "none",
+      } as CSSStyleDeclaration);
+      overlay.appendChild(canvas);
+    }
+
+    container.appendChild(overlay);
+    this.displayOverlay = overlay;
   }
 
   async start(): Promise<void> {
@@ -123,18 +158,20 @@ export class App {
   setDisplay(mode: DisplayMode): void {
     this.displayMode = mode;
     if (this.guiState) this.guiState.display = mode;
+
+    const traceCanvas = this.trace.domElement;
+    const bandsCanvas = this.bands.domElement;
     if (mode === "none") {
-      this.panel.setVisible(false);
+      this.displayOverlay.style.display = "none";
       return;
     }
-    if (mode === "trace") {
-      this.panel.setTexture(this.trace.texture);
-    } else {
+    if (mode !== "trace") {
       this.bands.setMode(mode === "fft" ? "fft" : "bands");
-      this.panel.setTexture(this.bands.texture);
       if (this.latestFrame) this.bands.update(this.latestFrame);
     }
-    this.panel.setVisible(true);
+    traceCanvas.style.display = mode === "trace" ? "block" : "none";
+    bandsCanvas.style.display = mode === "trace" ? "none" : "block";
+    this.displayOverlay.style.display = "block";
   }
 
   showTrace(): void {
@@ -191,12 +228,11 @@ export class App {
   }
 
   /**
-   * Toggle whether the electrode point lights illuminate the head. When off,
-   * the lights are moved to a dedicated render layer that the head isn't on
-   * (the brain and markers are), so only the head is excluded.
+   * Toggle whether the electrode point lights illuminate the head. The brain
+   * and markers are always lit; only the head is added/removed.
    */
   setHeadLitByElectrodes(on: boolean): void {
-    this.electrodes?.setLightLayer(on ? 0 : ELECTRODE_LIGHT_LAYER);
+    this.electrodes?.setHeadLit(on);
   }
 
   /** Raycast every electrode onto the head surface with the current params. */

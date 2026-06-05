@@ -25,7 +25,7 @@ export function createScene(container: HTMLElement): SceneContext {
     0.01,
     100,
   );
-  camera.position.set(0, 0.4, 3.2);
+  camera.position.set(0, -0.1, 3.2);
 
   const renderer = new WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -37,7 +37,8 @@ export function createScene(container: HTMLElement): SceneContext {
   controls.dampingFactor = 0.08;
   controls.minDistance = 1.2;
   controls.maxDistance = 8;
-  controls.target.set(0, 0, 0);
+  // Aim below the brain so the brain sits in the upper half of the screen.
+  controls.target.set(0, -1.0, 0);
 
   scene.add(new AmbientLight(0x6677aa, 0.6));
   const key = new DirectionalLight(0xffffff, 1.1);

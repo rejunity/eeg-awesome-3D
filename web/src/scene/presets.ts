@@ -19,7 +19,7 @@ export const PRESETS: Preset[] = [
       app.brainHead.setBrainVisible(true);
       app.electrodes.setColorMode("redgreen");
       app.electrodes.setIndicatorsVisible(true);
-      app.panel.setVisible(false);
+      app.setDisplay("none");
       app.setAutoRotate(false);
     },
   },
@@ -31,7 +31,7 @@ export const PRESETS: Preset[] = [
       app.brainHead.setBrainVisible(true);
       app.electrodes.setColorMode("redgreen");
       app.electrodes.setIndicatorsVisible(true);
-      app.panel.setVisible(false);
+      app.setDisplay("none");
       app.setAutoRotate(false);
     },
   },
@@ -43,7 +43,7 @@ export const PRESETS: Preset[] = [
       app.electrodes.setColorMode("band");
       app.electrodes.setBand("alpha");
       app.electrodes.setIndicatorsVisible(true);
-      app.panel.setVisible(false);
+      app.setDisplay("none");
       app.setAutoRotate(false);
     },
   },
@@ -65,7 +65,7 @@ export const PRESETS: Preset[] = [
       app.electrodes.setColorMode("band");
       app.electrodes.setBand("beta");
       app.electrodes.setIndicatorsVisible(true);
-      app.panel.setVisible(false);
+      app.setDisplay("none");
       app.setAutoRotate(false);
     },
   },
@@ -87,7 +87,7 @@ export const PRESETS: Preset[] = [
       app.brainHead.setBrainVisible(true);
       app.electrodes.setColorMode("redgreen");
       app.electrodes.setIndicatorsVisible(true);
-      app.panel.setVisible(false);
+      app.setDisplay("none");
       app.setAutoRotate(true);
     },
   },

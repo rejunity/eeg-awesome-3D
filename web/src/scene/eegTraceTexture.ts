@@ -27,6 +27,11 @@ export class EEGTraceTexture {
     this.texture.magFilter = LinearFilter;
   }
 
+  /** The backing canvas, for displaying the trace as a 2D DOM overlay. */
+  get domElement(): HTMLCanvasElement {
+    return this.canvas;
+  }
+
   setInvert(invert: boolean): void {
     this.invert = invert;
     this.clear();

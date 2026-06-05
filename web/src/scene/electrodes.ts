@@ -109,12 +109,16 @@ export class Electrodes {
   }
 
   /**
-   * Put the electrode point lights on a single render layer. With the head off
-   * that layer (and the brain/markers on it), the lights stop illuminating the
-   * head while still glowing the brain and markers.
+   * Control whether the electrode point lights illuminate the head. The lights
+   * are always on ELECTRODE_LIGHT_LAYER (so the brain and markers — which share
+   * that layer — are always lit), and layer 0 (the head's layer) is added only
+   * when ``headLit`` is true.
    */
-  setLightLayer(layer: number): void {
-    for (const n of this.nodes.values()) n.light.layers.set(layer);
+  setHeadLit(headLit: boolean): void {
+    for (const n of this.nodes.values()) {
+      n.light.layers.set(ELECTRODE_LIGHT_LAYER);
+      if (headLit) n.light.layers.enable(0);
+    }
   }
 
   setShape(shape: ElectrodeShape): void {
