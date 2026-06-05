@@ -38,7 +38,7 @@ const CUT_BOTTOM = -3.3; // cut at/below this -> head fully discarded
 // frontal lobe tilts down following the cranial base, and lowered so it nestles
 // in the upper skull with its crown just under the head's. All three are
 // tunable knobs — adjust against a screenshot.
-const BRAIN_SCALE = 1.4; // uniform scale of brain.glb (glb max dim ~1.32 -> ~1.85)
+const BRAIN_SCALE = 1.135; // uniform scale of brain.glb (glb max dim ~1.32)
 const BRAIN_PITCH = -0.1; // radians about X (+ = frontal lobe tilts down)
 // Head placement, derived to match the head→brain relationship in the Unity
 // scene (`_CGX_Main_Scene.unity`), with the brain centred on the origin.
@@ -58,10 +58,13 @@ const HEAD_SCALE_REL = 0.254; // uniform head scale (matches Unity head/brain ra
 // Head bbox centre in world space (brain centre = origin). The head drops below
 // the brain so the brain sits high in the cranium and the face extends down,
 // exactly as in Unity. NB: per request this ignores electrode positions.
-const HEAD_CENTER = new Vector3(0.046, -1.388, -0.057);
+// X is forced to 0 so the head's midline aligns with the electrode array
+// (which is symmetric about x=0); the original Unity X shift (~0.046) is dropped.
+const HEAD_CENTER = new Vector3(0, -1.388, -0.057);
 // Brain bbox centre in world space — inside the cranium of the fixed head, with
 // the crown just below the head's (head crown y≈0.47).
-const BRAIN_CENTER = new Vector3(0.05, -0.55, -0.05);
+// X forced to 0 to share the electrode/head midline (drops the Unity X shift).
+const BRAIN_CENTER = new Vector3(0, -0.55, -0.05);
 
 export class BrainHead {
   readonly group = new Group();

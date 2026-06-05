@@ -41,6 +41,9 @@ export class App {
   private autoRotate = false;
   private displayMode: DisplayMode = "none";
 
+  // Default electrode-array orientation (applied on load; also seeds the GUI).
+  readonly electrodeDefaults = { pitch: -0.1, height: -0.45 };
+
   // Set by installGUI so presets can keep GUI widgets in sync.
   guiState: Record<string, unknown> | null = null;
 
@@ -70,6 +73,9 @@ export class App {
     this.electrodes.group.position.copy(center.clone().negate());
     this.electrodePivot.add(this.electrodes.group);
     this.ctx.scene.add(this.electrodePivot);
+    // Apply the default array orientation.
+    this.setElectrodePitch(this.electrodeDefaults.pitch);
+    this.setElectrodeVerticalOffset(this.electrodeDefaults.height);
     for (const h of this.electrodesReadyHandlers) h(this.electrodes.channelNames);
   }
 

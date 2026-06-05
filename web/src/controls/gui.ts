@@ -25,8 +25,8 @@ export function installGUI(app: App): GUI {
     debugElectrode: "(none)",
     brainScale: BrainHead.defaults.brainScale,
     brainPitch: BrainHead.defaults.brainPitch,
-    electrodePitch: 0,
-    electrodeHeight: 0,
+    electrodePitch: app.electrodeDefaults.pitch,
+    electrodeHeight: app.electrodeDefaults.height,
   };
 
   gui
