@@ -30,7 +30,7 @@ export class App {
 
   // Pivot for the electrode array, placed at the brain centre so the whole
   // array can be pitched around it (see setElectrodePitch). The vertical
-  // offset (setElectrodeVerticalOffset) moves both the array and this pivot.
+  // offset rides this pivot's local (pitched) frame (setElectrodeVerticalOffset).
   private electrodePivot = new Group();
   private electrodeBaseCenter = new Vector3();
   private socket = new EEGSocket();
@@ -159,12 +159,13 @@ export class App {
   }
 
   /**
-   * Move the electrode array (and the pivot it rotates around) vertically.
-   * The array's group offset stays fixed, so raising the pivot raises both the
-   * electrodes and their rotation origin together.
+   * Move the electrode array vertically in the pivot's LOCAL frame, i.e. along
+   * the array's own up axis (which tilts with the electrode pitch), not world
+   * Y. Applied to the array inside the pivot so the offset rides the rotation;
+   * the pivot itself stays the fixed rotation origin.
    */
   setElectrodeVerticalOffset(dy: number): void {
-    this.electrodePivot.position.y = this.electrodeBaseCenter.y + dy;
+    this.electrodes.group.position.y = -this.electrodeBaseCenter.y + dy;
   }
 
   // -- hooks ---------------------------------------------------------------
