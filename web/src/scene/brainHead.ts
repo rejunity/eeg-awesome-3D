@@ -38,8 +38,8 @@ const CUT_BOTTOM = -3.3; // cut at/below this -> head fully discarded
 // frontal lobe tilts down following the cranial base, and lowered so it nestles
 // in the upper skull with its crown just under the head's. All three are
 // tunable knobs — adjust against a screenshot.
-const BRAIN_SCALE = 1.6; // uniform scale of brain.glb (glb max dim ~1.32 -> ~2.1)
-const BRAIN_PITCH = 0.2; // radians about X (+ = frontal lobe tilts down)
+const BRAIN_SCALE = 1.4; // uniform scale of brain.glb (glb max dim ~1.32 -> ~1.85)
+const BRAIN_PITCH = -0.1; // radians about X (+ = frontal lobe tilts down)
 // Head placement, derived to match the head→brain relationship in the Unity
 // scene (`_CGX_Main_Scene.unity`), with the brain centred on the origin.
 //

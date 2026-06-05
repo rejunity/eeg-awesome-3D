@@ -26,6 +26,7 @@ export function installGUI(app: App): GUI {
     brainScale: BrainHead.defaults.brainScale,
     brainPitch: BrainHead.defaults.brainPitch,
     electrodePitch: 0,
+    electrodeHeight: 0,
   };
 
   gui
@@ -97,6 +98,10 @@ export function installGUI(app: App): GUI {
     .add(state, "electrodePitch", -0.8, 0.8, 0.01)
     .name("Electrode pitch (rad)")
     .onChange((v: number) => app.setElectrodePitch(v));
+  anatomy
+    .add(state, "electrodeHeight", -1.5, 1.5, 0.01)
+    .name("Electrode height")
+    .onChange((v: number) => app.setElectrodeVerticalOffset(v));
 
   app.guiState = state;
   return gui;

@@ -1,4 +1,4 @@
-import { Clock, Group } from "three";
+import { Clock, Group, Vector3 } from "three";
 import { createScene, type SceneContext } from "./scene/createScene";
 import { BrainHead } from "./scene/brainHead";
 import { Electrodes } from "./scene/electrodes";
@@ -29,8 +29,10 @@ export class App {
   panel = new DisplayPanel();
 
   // Pivot for the electrode array, placed at the brain centre so the whole
-  // array can be pitched around it (see setElectrodePitch).
+  // array can be pitched around it (see setElectrodePitch). The vertical
+  // offset (setElectrodeVerticalOffset) moves both the array and this pivot.
   private electrodePivot = new Group();
+  private electrodeBaseCenter = new Vector3();
   private socket = new EEGSocket();
   private clock = new Clock();
   private tickHandlers: Array<(dt: number) => void> = [];
@@ -63,6 +65,7 @@ export class App {
     // same amount, so the electrodes keep their world positions but rotating
     // the pivot spins the whole array around the brain centre.
     const center = this.brainHead.brainCenter;
+    this.electrodeBaseCenter.copy(center);
     this.electrodePivot.position.copy(center);
     this.electrodes.group.position.copy(center.clone().negate());
     this.electrodePivot.add(this.electrodes.group);
@@ -150,9 +153,18 @@ export class App {
     if (this.guiState) this.guiState.autoRotate = on;
   }
 
-  /** Pitch the whole electrode array (radians) about the brain centre. */
+  /** Pitch the whole electrode array (radians) about its pivot. */
   setElectrodePitch(radians: number): void {
     this.electrodePivot.rotation.x = radians;
+  }
+
+  /**
+   * Move the electrode array (and the pivot it rotates around) vertically.
+   * The array's group offset stays fixed, so raising the pivot raises both the
+   * electrodes and their rotation origin together.
+   */
+  setElectrodeVerticalOffset(dy: number): void {
+    this.electrodePivot.position.y = this.electrodeBaseCenter.y + dy;
   }
 
   // -- hooks ---------------------------------------------------------------
