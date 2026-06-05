@@ -5,6 +5,7 @@ import {
   Mesh,
   MeshStandardMaterial,
   Object3D,
+  ShaderChunk,
   SphereGeometry,
   Vector3,
   type IUniform,
@@ -34,10 +35,13 @@ const CUT_TOP = 0.6; // cut at/above this -> whole head visible
 const CUT_BOTTOM = -3.3; // cut at/below this -> head fully discarded
 const DEFAULT_CUTAWAY = 0.72; // initial cutaway (1 = full head, 0 = fully cut)
 
-// Render layer used for the electrode point lights. Putting the brain (and the
-// electrode markers) on this layer while leaving the head off it lets the head
-// be excluded from the electrode lights (see App.setHeadLitByElectrodes).
-export const ELECTRODE_LIGHT_LAYER = 1;
+// The electrode markers use point lights. Three.js light "layers" are tested
+// against the camera (not per object), so they can't exclude a single object.
+// To keep the head out of the electrode lights while the brain/markers stay
+// lit, the head material drops point-light contribution (keeping ambient +
+// directional) — see _installCutShader / setHeadExcludesPointLights.
+const POINT_LIGHT_BLOCK =
+  /#if \( NUM_POINT_LIGHTS > 0 \) && defined\( RE_Direct \)[\s\S]*?#pragma unroll_loop_end\s*#endif/;
 
 // Brain placement, fitted anatomically INSIDE the fixed head (head world bbox
 // ~ x[-1.65,1.75], y[-3.25,0.47], z[-1.30,1.18]). The brain is scaled up to
@@ -84,6 +88,9 @@ export class BrainHead {
   private cut = DEFAULT_CUTAWAY;
   private headLoaded = false;
   private headReadyHandlers: Array<() => void> = [];
+  // When true, the head ignores point (electrode) lights. Default matches the
+  // "Head lit by electrodes" toggle being off.
+  private headExcludesPointLights = true;
   // Shared shader uniforms (wired in onBeforeCompile).
   private cutUniforms: { uCutHeight: IUniform<number>; uCutWave: IUniform<number> } = {
     uCutHeight: { value: CUT_BOTTOM + (CUT_TOP - CUT_BOTTOM) * DEFAULT_CUTAWAY },
@@ -119,9 +126,7 @@ export class BrainHead {
     // model (Realistic_Brain.fbx -> brain.glb) once it loads.
     const brainGeo = new IcosahedronGeometry(0.66, 4);
     this._displace(brainGeo);
-    const brainMesh = new Mesh(brainGeo, this.brainMaterial);
-    brainMesh.layers.enable(ELECTRODE_LIGHT_LAYER); // lit by electrode lights
-    this.brain.add(brainMesh);
+    this.brain.add(new Mesh(brainGeo, this.brainMaterial));
     // The brain group carries the anatomical placement: position = centre,
     // rotation.x = pitch, scale = BRAIN_SCALE. The loaded model is recentred on
     // the group origin so scale/pitch act about the brain centre. Scale and
@@ -207,10 +212,7 @@ export class BrainHead {
 
         model.traverse((obj) => {
           const mesh = obj as Mesh;
-          if (mesh.isMesh) {
-            mesh.material = this.brainMaterial;
-            mesh.layers.enable(ELECTRODE_LIGHT_LAYER); // lit by electrode lights
-          }
+          if (mesh.isMesh) mesh.material = this.brainMaterial;
         });
 
         this.brain.clear();
@@ -250,8 +252,25 @@ export class BrainHead {
           "  float cutLine = uCutHeight + uCutWave * sin(length(vCutWorldPos.xz) * 6.2831);\n" +
           "  if (vCutWorldPos.y > cutLine) discard;",
       );
+
+      // Optionally drop point-light (electrode) contribution from the head,
+      // keeping ambient + directional. Inlines the stock lights chunk with the
+      // point-light loop removed.
+      if (this.headExcludesPointLights) {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          "#include <lights_fragment_begin>",
+          ShaderChunk.lights_fragment_begin.replace(POINT_LIGHT_BLOCK, ""),
+        );
+      }
     };
     material.needsUpdate = true;
+  }
+
+  /** Whether the head ignores electrode (point) lights; recompiles the shader. */
+  setHeadExcludesPointLights(exclude: boolean): void {
+    if (this.headExcludesPointLights === exclude) return;
+    this.headExcludesPointLights = exclude;
+    this.headMaterial.needsUpdate = true; // re-runs onBeforeCompile
   }
 
   private _displace(geo: IcosahedronGeometry): void {

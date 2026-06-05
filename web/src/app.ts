@@ -14,6 +14,9 @@ import type {
 
 export type DisplayMode = "none" | "trace" | "bands" | "fft";
 
+// Fraction of screen height the 2D panel occupies at the top.
+const PANEL_FRACTION = 0.25;
+
 /**
  * Top-level application: owns the scene, the data socket, and the render loop.
  * Frames from the backend drive electrode colours and the trace/band textures;
@@ -228,11 +231,12 @@ export class App {
   }
 
   /**
-   * Toggle whether the electrode point lights illuminate the head. The brain
-   * and markers are always lit; only the head is added/removed.
+   * Toggle whether the head is lit by the electrode (point) lights. The lights
+   * are global, so the brain and markers are always lit; turning this off makes
+   * only the head material ignore the point lights.
    */
   setHeadLitByElectrodes(on: boolean): void {
-    this.electrodes?.setHeadLit(on);
+    this.brainHead.setHeadExcludesPointLights(!on);
   }
 
   /** Raycast every electrode onto the head surface with the current params. */
@@ -267,6 +271,19 @@ export class App {
       this.ctx.scene.rotation.y += dt * 0.2;
     }
     this.ctx.controls.update();
+
+    // When the 2D panel covers the top quarter, confine the 3D render to the
+    // area below it so the head isn't hidden behind the panel.
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const viewH = this.displayMode === "none" ? h : h * (1 - PANEL_FRACTION);
+    this.ctx.renderer.setViewport(0, 0, w, viewH);
+    const aspect = w / viewH;
+    if (Math.abs(this.ctx.camera.aspect - aspect) > 1e-4) {
+      this.ctx.camera.aspect = aspect;
+      this.ctx.camera.updateProjectionMatrix();
+    }
+
     this.ctx.renderer.render(this.ctx.scene, this.ctx.camera);
   };
 }

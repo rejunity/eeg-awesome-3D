@@ -15,7 +15,6 @@ import {
 } from "three";
 import type { ElectrodeMeta } from "../net/protocol";
 import { redGreen, BAND_COLORS } from "./colormap";
-import { ELECTRODE_LIGHT_LAYER } from "./brainHead";
 
 interface ElectrodeNode {
   name: string;
@@ -67,9 +66,6 @@ export class Electrodes {
         roughness: 0.4,
       });
       const mesh = new Mesh(this.sphereGeo, material);
-      // Markers are on the electrode-light layer too, so they stay lit when the
-      // electrode lights are moved off the head's layer.
-      mesh.layers.enable(ELECTRODE_LIGHT_LAYER);
       const nominal = new Vector3(...meta.position).multiplyScalar(1.04);
       mesh.position.copy(nominal);
 
@@ -106,19 +102,6 @@ export class Electrodes {
 
   setDebugElectrode(name: string | null): void {
     this.debugElectrode = name ? normalize(name) : null;
-  }
-
-  /**
-   * Control whether the electrode point lights illuminate the head. The lights
-   * are always on ELECTRODE_LIGHT_LAYER (so the brain and markers — which share
-   * that layer — are always lit), and layer 0 (the head's layer) is added only
-   * when ``headLit`` is true.
-   */
-  setHeadLit(headLit: boolean): void {
-    for (const n of this.nodes.values()) {
-      n.light.layers.set(ELECTRODE_LIGHT_LAYER);
-      if (headLit) n.light.layers.enable(0);
-    }
   }
 
   setShape(shape: ElectrodeShape): void {
