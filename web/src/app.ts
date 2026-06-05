@@ -1,7 +1,7 @@
-import { Clock, Group, Vector3 } from "three";
+import { Clock } from "three";
 import { createScene, type SceneContext } from "./scene/createScene";
 import { BrainHead } from "./scene/brainHead";
-import { Electrodes } from "./scene/electrodes";
+import { Electrodes, type ElectrodeShape } from "./scene/electrodes";
 import { EEGTraceTexture } from "./scene/eegTraceTexture";
 import { BandTexture } from "./scene/bandTexture";
 import { DisplayPanel } from "./scene/displayPanel";
@@ -28,11 +28,6 @@ export class App {
   bands = new BandTexture();
   panel = new DisplayPanel();
 
-  // Pivot for the electrode array, placed at the brain centre so the whole
-  // array can be pitched around it (see setElectrodePitch). The vertical
-  // offset rides this pivot's local (pitched) frame (setElectrodeVerticalOffset).
-  private electrodePivot = new Group();
-  private electrodeBaseCenter = new Vector3();
   private socket = new EEGSocket();
   private clock = new Clock();
   private tickHandlers: Array<(dt: number) => void> = [];
@@ -41,8 +36,20 @@ export class App {
   private autoRotate = false;
   private displayMode: DisplayMode = "none";
 
-  // Default electrode-array orientation (applied on load; also seeds the GUI).
-  readonly electrodeDefaults = { pitch: -0.1, height: -0.45 };
+  // Electrode-array placement params. pitch/height orient the nominal shell
+  // (height in the array's local, pitched frame); distance is the gap from the
+  // scalp; shape selects sphere/cone. Changing any of these re-projects the
+  // electrodes onto the head surface. These defaults also seed the GUI.
+  readonly electrodeDefaults = {
+    pitch: -0.1,
+    height: -0.45,
+    distance: 0.04,
+    shape: "sphere" as ElectrodeShape,
+  };
+  private electrodePitch = this.electrodeDefaults.pitch;
+  private electrodeHeight = this.electrodeDefaults.height;
+  private electrodeDistance = this.electrodeDefaults.distance;
+  private electrodeShape: ElectrodeShape = this.electrodeDefaults.shape;
 
   // Set by installGUI so presets can keep GUI widgets in sync.
   guiState: Record<string, unknown> | null = null;
@@ -64,18 +71,11 @@ export class App {
     const res = await fetch("/api/electrodes");
     const data: ElectrodeResponse = await res.json();
     this.electrodes = new Electrodes(data.electrodes);
-    // Mount the array under a pivot at the brain centre and offset it by the
-    // same amount, so the electrodes keep their world positions but rotating
-    // the pivot spins the whole array around the brain centre.
-    const center = this.brainHead.brainCenter;
-    this.electrodeBaseCenter.copy(center);
-    this.electrodePivot.position.copy(center);
-    this.electrodes.group.position.copy(center.clone().negate());
-    this.electrodePivot.add(this.electrodes.group);
-    this.ctx.scene.add(this.electrodePivot);
-    // Apply the default array orientation.
-    this.setElectrodePitch(this.electrodeDefaults.pitch);
-    this.setElectrodeVerticalOffset(this.electrodeDefaults.height);
+    this.electrodes.setShape(this.electrodeShape);
+    this.ctx.scene.add(this.electrodes.group);
+    // Project electrodes onto the head surface once the head model is ready,
+    // and again whenever an electrode control changes (see projectElectrodes).
+    this.brainHead.onHeadReady(() => this.projectElectrodes());
     for (const h of this.electrodesReadyHandlers) h(this.electrodes.channelNames);
   }
 
@@ -159,19 +159,43 @@ export class App {
     if (this.guiState) this.guiState.autoRotate = on;
   }
 
-  /** Pitch the whole electrode array (radians) about its pivot. */
+  /** Pitch the electrode array (radians about X, through the brain centre). */
   setElectrodePitch(radians: number): void {
-    this.electrodePivot.rotation.x = radians;
+    this.electrodePitch = radians;
+    this.projectElectrodes();
   }
 
   /**
-   * Move the electrode array vertically in the pivot's LOCAL frame, i.e. along
-   * the array's own up axis (which tilts with the electrode pitch), not world
-   * Y. Applied to the array inside the pivot so the offset rides the rotation;
-   * the pivot itself stays the fixed rotation origin.
+   * Move the electrode array along its own (pitched) up axis, then re-project
+   * onto the head — so the electrodes slide up/down the scalp.
    */
   setElectrodeVerticalOffset(dy: number): void {
-    this.electrodes.group.position.y = -this.electrodeBaseCenter.y + dy;
+    this.electrodeHeight = dy;
+    this.projectElectrodes();
+  }
+
+  /** Gap (world units) between the scalp surface and the electrode marker. */
+  setElectrodeDistance(distance: number): void {
+    this.electrodeDistance = distance;
+    this.projectElectrodes();
+  }
+
+  /** Electrode marker shape: sphere, or cone pointing outward along the normal. */
+  setElectrodeShape(shape: ElectrodeShape): void {
+    this.electrodeShape = shape;
+    this.electrodes?.setShape(shape);
+    this.projectElectrodes();
+  }
+
+  /** Raycast every electrode onto the head surface with the current params. */
+  private projectElectrodes(): void {
+    if (!this.electrodes) return;
+    this.electrodes.project(this.brainHead.raycastTarget, {
+      pitch: this.electrodePitch,
+      height: this.electrodeHeight,
+      distance: this.electrodeDistance,
+      brainCenter: this.brainHead.brainCenter,
+    });
   }
 
   // -- hooks ---------------------------------------------------------------

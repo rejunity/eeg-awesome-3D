@@ -2,6 +2,7 @@ import GUI from "lil-gui";
 import type { App } from "../app";
 import { PRESETS } from "../scene/presets";
 import { BrainHead } from "../scene/brainHead";
+import type { ElectrodeShape } from "../scene/electrodes";
 
 const BANDS = ["delta", "theta", "alpha", "beta", "gamma"];
 
@@ -27,6 +28,8 @@ export function installGUI(app: App): GUI {
     brainPitch: BrainHead.defaults.brainPitch,
     electrodePitch: app.electrodeDefaults.pitch,
     electrodeHeight: app.electrodeDefaults.height,
+    electrodeDistance: app.electrodeDefaults.distance,
+    electrodeShape: app.electrodeDefaults.shape,
   };
 
   gui
@@ -102,6 +105,14 @@ export function installGUI(app: App): GUI {
     .add(state, "electrodeHeight", -1.5, 1.5, 0.01)
     .name("Electrode height")
     .onChange((v: number) => app.setElectrodeVerticalOffset(v));
+  anatomy
+    .add(state, "electrodeDistance", 0.0, 0.4, 0.005)
+    .name("Electrode distance")
+    .onChange((v: number) => app.setElectrodeDistance(v));
+  anatomy
+    .add(state, "electrodeShape", ["sphere", "cone"])
+    .name("Electrode shape")
+    .onChange((v: string) => app.setElectrodeShape(v as ElectrodeShape));
 
   app.guiState = state;
   return gui;

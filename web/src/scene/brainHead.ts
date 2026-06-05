@@ -4,6 +4,7 @@ import {
   IcosahedronGeometry,
   Mesh,
   MeshStandardMaterial,
+  Object3D,
   SphereGeometry,
   Vector3,
   type IUniform,
@@ -75,6 +76,8 @@ export class BrainHead {
   private headMaterial: MeshStandardMaterial;
   // Normalized cut control in [0, 1]: 1 = full head, 0 = fully cut away.
   private cut = 1.0;
+  private headLoaded = false;
+  private headReadyHandlers: Array<() => void> = [];
   // Shared shader uniforms (wired in onBeforeCompile).
   private cutUniforms: { uCutHeight: IUniform<number>; uCutWave: IUniform<number> } = {
     uCutHeight: { value: CUT_TOP },
@@ -162,10 +165,15 @@ export class BrainHead {
 
         this.head.clear();
         this.head.add(model);
+        this.headLoaded = true;
+        for (const h of this.headReadyHandlers) h();
       },
       undefined,
       (err) => {
         console.warn("head.glb failed to load; using procedural head", err);
+        // Still fire so electrodes can project onto the procedural fallback.
+        this.headLoaded = true;
+        for (const h of this.headReadyHandlers) h();
       },
     );
   }
@@ -283,6 +291,17 @@ export class BrainHead {
   /** World-space brain centre (pivot for the brain and the electrode array). */
   get brainCenter(): Vector3 {
     return this.brain.position.clone();
+  }
+
+  /** Object to raycast electrodes against (the head model / procedural fallback). */
+  get raycastTarget(): Object3D {
+    return this.head;
+  }
+
+  /** Run ``cb`` once the head model is loaded (or immediately if already loaded). */
+  onHeadReady(cb: () => void): void {
+    if (this.headLoaded) cb();
+    else this.headReadyHandlers.push(cb);
   }
 
   /** Default knob values, so the GUI can initialise its sliders. */
