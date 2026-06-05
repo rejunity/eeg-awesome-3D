@@ -177,6 +177,11 @@ export class App {
     this.displayOverlay.style.display = "block";
   }
 
+  /** Toggle a display mode: show it, or close the panel if it's already shown. */
+  toggleDisplay(mode: Exclude<DisplayMode, "none">): void {
+    this.setDisplay(this.displayMode === mode ? "none" : mode);
+  }
+
   showTrace(): void {
     this.setDisplay("trace");
   }

@@ -22,15 +22,15 @@ export function installKeyboard(app: App): void {
         break;
       case "z":
       case "Z":
-        app.showTrace();
+        app.toggleDisplay("trace");
         break;
       case "x":
       case "X":
-        app.showBands();
+        app.toggleDisplay("bands");
         break;
       case "c":
       case "C":
-        app.showFFT();
+        app.toggleDisplay("fft");
         break;
       default:
         if (e.key >= "1" && e.key <= "7") {
