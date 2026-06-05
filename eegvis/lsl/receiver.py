@@ -19,7 +19,12 @@ import numpy as np
 from ..config import StreamConfig
 from ..models import EEGChunk, StreamMetadata
 from ..assets.electrodes_cgx import montage_for_channel_count
-from .discovery import DiscoveredStream, choose_stream, discover_streams
+from .discovery import (
+    DiscoveredStream,
+    _metadata_from_info,
+    choose_stream,
+    discover_streams,
+)
 
 StatusCallback = Callable[[str, bool, StreamMetadata | None], None]
 
@@ -93,9 +98,16 @@ class LSLReceiver:
                     return
                 continue
 
-            metadata = _annotate_metadata(chosen.metadata)
-            self.metadata = metadata
             inlet = pylsl.StreamInlet(chosen.info, max_chunklen=0, recover=False)
+            # resolve_streams returns a lightweight StreamInfo without the full
+            # <desc> (channel labels); the inlet's own info() carries it, so
+            # re-read metadata from there to get real channel names/types.
+            try:
+                full_info = inlet.info(2.0)
+                metadata = _annotate_metadata(_metadata_from_info(full_info))
+            except Exception:
+                metadata = _annotate_metadata(chosen.metadata)
+            self.metadata = metadata
             self._on_status("connected", True, metadata)
 
             self._pull_loop(inlet, metadata)
