@@ -43,11 +43,14 @@ export class App {
   private autoRotate = false;
   private displayMode: DisplayMode = "none";
 
-  // HUD: stream info text + measured received-frame rate (EMA, Hz).
+  // Frames received but not yet rendered; the render loop drains them so it can
+  // skip stale frames for the 3D view when behind.
+  private pendingFrames: EEGFramePayload[] = [];
+  // HUD: stream info text + received-frame rate (windowed count, Hz).
   private streamInfoText = "";
   private recvRate = 0;
-  private lastFrameT = 0;
-  private lastMetaRender = 0;
+  private recvCount = 0;
+  private recvWindowStart = 0;
 
   // Electrode-array placement params. pitch/height orient the nominal shell
   // (height in the array's local, pitched frame); distance is the gap from the
@@ -146,7 +149,7 @@ export class App {
 
   private connect(): void {
     this.socket.onStatus = (s) => this.handleStatus(s);
-    this.socket.onFrame = (f) => this.handleFrame(f);
+    this.socket.onFrame = (f) => this.enqueueFrame(f);
     this.socket.onClose = () => this.setStatusText("disconnected — reconnecting…", false);
     // Sync the band selection to the backend on (re)connect.
     this.socket.onOpen = () => this._sendBand();
@@ -183,43 +186,52 @@ export class App {
     meta.textContent = this.streamInfoText + rate;
   }
 
-  private handleFrame(f: EEGFramePayload): void {
-    this.latestFrame = f;
-
-    // Measure received-frame rate (EMA of 1/Δt) and refresh the HUD ~4x/sec.
+  /** Cheap per-frame handler: buffer the frame and tally the receive rate. */
+  private enqueueFrame(f: EEGFramePayload): void {
+    this.pendingFrames.push(f);
+    this.recvCount++;
     const now = performance.now();
-    if (this.lastFrameT > 0) {
-      const dt = (now - this.lastFrameT) / 1000;
-      if (dt > 0) {
-        const inst = 1 / dt;
-        this.recvRate = this.recvRate > 0 ? this.recvRate * 0.9 + inst * 0.1 : inst;
-      }
-    }
-    this.lastFrameT = now;
-    if (now - this.lastMetaRender > 250) {
-      this.lastMetaRender = now;
+    if (this.recvWindowStart === 0) this.recvWindowStart = now;
+    const elapsed = now - this.recvWindowStart;
+    if (elapsed >= 500) {
+      this.recvRate = (this.recvCount * 1000) / elapsed;
+      this.recvCount = 0;
+      this.recvWindowStart = now;
       this._renderMeta();
     }
+  }
 
-    // No backend filtering: map each raw value to a z-score via the per-channel
-    // running mean/SD, then scale to [-1, 1] over ±colorSD standard deviations.
+  /**
+   * Drain buffered frames (called from the render loop). Every frame feeds the
+   * traces (so the strip charts keep full resolution), but only the most recent
+   * frame drives the 3D electrodes / band panel — i.e. the renderer skips stale
+   * frames for the expensive 3D update when it falls behind.
+   */
+  private consumeFrames(): void {
+    if (this.pendingFrames.length === 0) return;
     const sd = this.colorSD || 1;
-    const display = f.latest.map((x, i) => {
-      const z = this.stats.zscore(f.channels[i], x);
-      return Math.max(-1, Math.min(1, z / sd));
-    });
-    if (this.electrodes) {
-      this.electrodes.update(f.channels, display);
+    let lastDisplay: number[] | null = null;
+    let last: EEGFramePayload | null = null;
+    for (const f of this.pendingFrames) {
+      const display = f.latest.map((x, i) =>
+        Math.max(-1, Math.min(1, this.stats.zscore(f.channels[i], x) / sd)),
+      );
+      this.trace.push(display, f.channels);
+      const rawDisplay = f.raw.map((x, i) =>
+        Math.max(-1, Math.min(1, this.rawStats.zscore(f.channels[i], x) / sd)),
+      );
+      this.rawTrace.push(rawDisplay, f.channels);
+      lastDisplay = display;
+      last = f;
     }
-    this.trace.push(display, f.channels);
-    // Raw (pre-processor) trace, normalised by its own running stats.
-    const rawDisplay = f.raw.map((x, i) => {
-      const z = this.rawStats.zscore(f.channels[i], x);
-      return Math.max(-1, Math.min(1, z / sd));
-    });
-    this.rawTrace.push(rawDisplay, f.channels);
-    if (this.displayMode === "bands" || this.displayMode === "fft") {
-      this.bands.update(f);
+    this.pendingFrames.length = 0;
+
+    if (last && lastDisplay) {
+      this.latestFrame = last;
+      if (this.electrodes) this.electrodes.update(last.channels, lastDisplay);
+      if (this.displayMode === "bands" || this.displayMode === "fft") {
+        this.bands.update(last);
+      }
     }
   }
 
@@ -349,6 +361,9 @@ export class App {
 
   private renderLoop = (): void => {
     requestAnimationFrame(this.renderLoop);
+    // Apply any frames received since the last render (skipping stale ones for
+    // the 3D view).
+    this.consumeFrames();
     const dt = this.clock.getDelta();
     for (const h of this.tickHandlers) h(dt);
     if (this.autoRotate) {

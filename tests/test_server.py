@@ -39,16 +39,20 @@ def test_electrodes_endpoint():
 def test_websocket_emits_frames():
     with _client() as client:
         with client.websocket_connect("/ws/eeg") as ws:
-            # First message should be a status payload.
-            first = ws.receive_json()
-            assert first["type"] in ("status", "eeg_frame")
-            # Within a few messages we should see an eeg_frame.
-            saw_frame = first["type"] == "eeg_frame"
+            # Messages are batches: {"type": "batch", "messages": [...]}.
+            saw_status = False
+            saw_frame = False
             for _ in range(60):
                 msg = ws.receive_json()
-                if msg["type"] == "eeg_frame":
-                    saw_frame = True
-                    assert "normalized" in msg
-                    assert "channels" in msg
+                assert msg["type"] == "batch"
+                for m in msg["messages"]:
+                    if m["type"] == "status":
+                        saw_status = True
+                    if m["type"] == "eeg_frame":
+                        saw_frame = True
+                        assert "channels" in m
+                        assert "raw" in m
+                if saw_frame:
                     break
+            assert saw_status
             assert saw_frame

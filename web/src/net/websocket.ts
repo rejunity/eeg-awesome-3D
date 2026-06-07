@@ -47,14 +47,21 @@ export class EEGSocket {
     };
 
     ws.onmessage = (ev) => {
-      let msg: ServerMessage;
+      let msg: ServerMessage | { type: "batch"; messages: ServerMessage[] };
       try {
         msg = JSON.parse(ev.data as string);
       } catch {
         return;
       }
-      if (isStatus(msg)) this.onStatus(msg);
-      else if (isFrame(msg)) this.onFrame(msg);
+      // The server batches all frames accumulated since the last flush into one
+      // message; unwrap and route each. Single messages are still handled.
+      if ((msg as { type: string }).type === "batch") {
+        for (const m of (msg as { messages: ServerMessage[] }).messages) {
+          this.route(m);
+        }
+      } else {
+        this.route(msg as ServerMessage);
+      }
     };
 
     ws.onclose = () => {
@@ -65,6 +72,11 @@ export class EEGSocket {
     ws.onerror = () => {
       ws.close();
     };
+  }
+
+  private route(m: ServerMessage): void {
+    if (isStatus(m)) this.onStatus(m);
+    else if (isFrame(m)) this.onFrame(m);
   }
 
   private scheduleReconnect(): void {
