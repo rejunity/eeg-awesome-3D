@@ -28,45 +28,11 @@ processing:
   output_hz: 30
   # Rolling analysis window length in seconds.
   rolling_window_seconds: 5.0
-  processors:
-    - name: bandpass
-      enabled: true
-      low_hz: 1.0
-      high_hz: 45.0
-      order: 4
-    - name: notch
-      enabled: false
-      hz: 50.0
-      quality: 30.0
-    - name: normalization
-      enabled: true
-      method: moving_minmax   # moving_minmax | zscore
-      reactivity: 0.9
-      expected_mean: 0.5
-      expected_variance: 0.25
-    - name: fft
-      enabled: true
-      window_seconds: 1.0
-      update_hz: 10
-      max_freq_hz: 45.0
-      max_channels: 32
-    - name: band_power
-      enabled: true
-      bands:
-        delta: [1, 4]
-        theta: [4, 8]
-        alpha: [8, 13]
-        beta: [13, 30]
-        gamma: [30, 45]
-    - name: smoothing
-      enabled: true
-      method: exponential
-      alpha: 0.25
-    - name: short_fourier
-      enabled: true
-      reactivity: 0.1
-      multiplier: 1.0
-      frequencies: [10, 20, 40]
+  # No processing/filtering between the stream and the visualisation: raw
+  # per-channel `latest` values are sent through, and the browser maps colour
+  # from a per-channel running mean/standard deviation. (Processor classes still
+  # exist and can be re-enabled here.)
+  processors: []
 
 synthetic:
   channel_count: 37        # match a CGX Quick32r stream

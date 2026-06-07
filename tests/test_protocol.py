@@ -2,15 +2,21 @@ from eegvis.config import load_config
 from eegvis.models import EEGFramePayload, StatusPayload, StreamInfoPayload
 
 
-def test_default_config_loads_and_has_processors():
+def test_default_config_is_passthrough():
+    # Default flow has no processing/filtering between stream and visualisation.
     cfg = load_config()
     assert cfg.server.port == 8765
-    names = [p.name for p in cfg.processing.processors]
-    assert "normalization" in names
-    assert "band_power" in names
-    # processor-specific options are preserved via extra="allow"
-    bp = next(p for p in cfg.processing.processors if p.name == "bandpass")
+    assert cfg.processing.processors == []
+
+
+def test_processor_options_preserved_when_configured():
+    # Processor-specific options are still preserved via extra="allow" when a
+    # processor is configured explicitly.
+    from eegvis.config import ProcessorConfig
+
+    bp = ProcessorConfig(name="bandpass", enabled=True, low_hz=1.0, high_hz=45.0)
     assert bp.options()["low_hz"] == 1.0
+    assert bp.options()["high_hz"] == 45.0
 
 
 def test_status_payload_serialization():

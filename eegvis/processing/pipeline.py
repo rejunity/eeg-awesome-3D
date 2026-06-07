@@ -112,7 +112,16 @@ class Pipeline:
     def _assemble(self, state: ProcessingState, outputs: dict) -> EEGFramePayload:
         channels = state.eeg_channel_names
 
-        latest = outputs.get("latest", [])
+        # Always emit the raw last sample per EEG channel (no filtering). A
+        # processor may still override `latest`/`normalized` if one is enabled.
+        if state.rolling_timestamps.size and state.eeg_channel_indices:
+            raw_latest = (
+                state.rolling_data[-1, state.eeg_channel_indices].astype(float).tolist()
+            )
+        else:
+            raw_latest = []
+
+        latest = outputs.get("latest", raw_latest)
         normalized = outputs.get("normalized", [])
         bands = outputs.get("bands", {})
         short_fourier = outputs.get("short_fourier")

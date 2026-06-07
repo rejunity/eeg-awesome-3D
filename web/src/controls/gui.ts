@@ -19,6 +19,7 @@ export function installGUI(app: App): GUI {
     display: "none",
     colorMode: "redgreen",
     band: "alpha",
+    colorSD: app.colorSDDefault,
     headCutaway: BrainHead.defaults.cutaway,
     indicators: true,
     invertTrace: false,
@@ -45,6 +46,11 @@ export function installGUI(app: App): GUI {
     .name("Display")
     .listen()
     .onChange((mode: string) => app.setDisplay(mode as any));
+
+  gui
+    .add(state, "colorSD", 0.5, 6.0, 0.1)
+    .name("Color SD (±σ)")
+    .onChange((v: number) => app.setColorSD(v));
 
   gui
     .add(state, "colorMode", ["redgreen", "band"])

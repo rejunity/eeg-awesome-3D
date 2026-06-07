@@ -4,6 +4,7 @@ import { BrainHead } from "./scene/brainHead";
 import { Electrodes, type ElectrodeShape } from "./scene/electrodes";
 import { EEGTraceTexture } from "./scene/eegTraceTexture";
 import { BandTexture } from "./scene/bandTexture";
+import { RunningStats } from "./scene/runningStats";
 import { PRESETS } from "./scene/presets";
 import { EEGSocket } from "./net/websocket";
 import type {
@@ -55,6 +56,12 @@ export class App {
   private electrodeHeight = this.electrodeDefaults.height;
   private electrodeDistance = this.electrodeDefaults.distance;
   private electrodeShape: ElectrodeShape = this.electrodeDefaults.shape;
+
+  // Per-channel running mean/SD for colour mapping, and the SD span the colour
+  // gradient covers (-colorSD..+colorSD standard deviations).
+  private stats = new RunningStats();
+  readonly colorSDDefault = 2.5;
+  private colorSD = this.colorSDDefault;
 
   // Set by installGUI so presets can keep GUI widgets in sync.
   guiState: Record<string, unknown> | null = null;
@@ -140,13 +147,25 @@ export class App {
 
   private handleFrame(f: EEGFramePayload): void {
     this.latestFrame = f;
+    // No backend filtering: map each raw value to a z-score via the per-channel
+    // running mean/SD, then scale to [-1, 1] over ±colorSD standard deviations.
+    const sd = this.colorSD || 1;
+    const display = f.latest.map((x, i) => {
+      const z = this.stats.zscore(f.channels[i], x);
+      return Math.max(-1, Math.min(1, z / sd));
+    });
     if (this.electrodes) {
-      this.electrodes.update(f.channels, f.normalized, f.bands);
+      this.electrodes.update(f.channels, display, f.bands);
     }
-    this.trace.push(f.normalized);
+    this.trace.push(display);
     if (this.displayMode === "bands" || this.displayMode === "fft") {
       this.bands.update(f);
     }
+  }
+
+  /** SD span the electrode colour gradient covers (±colorSD std deviations). */
+  setColorSD(sd: number): void {
+    this.colorSD = sd;
   }
 
   private setStatusText(text: string, connected: boolean): void {
