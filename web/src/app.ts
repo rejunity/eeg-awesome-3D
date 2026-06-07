@@ -13,7 +13,7 @@ import type {
   StatusPayload,
 } from "./net/protocol";
 
-export type DisplayMode = "none" | "trace" | "bands" | "fft";
+export type DisplayMode = "none" | "trace" | "rawtrace" | "bands" | "fft";
 
 // Fraction of screen height the 2D panel occupies at the top.
 const PANEL_FRACTION = 0.25;
@@ -27,10 +27,13 @@ export class App {
   ctx: SceneContext;
   brainHead = new BrainHead();
   electrodes!: Electrodes;
-  trace = new EEGTraceTexture();
+  trace = new EEGTraceTexture(); // processed (post-processor) trace
+  rawTrace = new EEGTraceTexture(); // raw (pre-processor) trace
   bands = new BandTexture();
   // 2D HUD overlay (top quarter of the screen) for the trace/band/FFT panels.
   private displayOverlay!: HTMLDivElement;
+  // Separate running stats so the raw trace is normalised independently.
+  private rawStats = new RunningStats();
 
   private socket = new EEGSocket();
   private clock = new Clock();
@@ -95,7 +98,12 @@ export class App {
       background: "rgba(5,7,13,0.35)",
     } as CSSStyleDeclaration);
 
-    for (const canvas of [this.trace.domElement, this.bands.domElement]) {
+    const canvases = [
+      this.trace.domElement,
+      this.rawTrace.domElement,
+      this.bands.domElement,
+    ];
+    for (const canvas of canvases) {
       Object.assign(canvas.style, {
         position: "absolute",
         inset: "0",
@@ -175,6 +183,12 @@ export class App {
       this.electrodes.update(f.channels, display);
     }
     this.trace.push(display, f.channels);
+    // Raw (pre-processor) trace, normalised by its own running stats.
+    const rawDisplay = f.raw.map((x, i) => {
+      const z = this.rawStats.zscore(f.channels[i], x);
+      return Math.max(-1, Math.min(1, z / sd));
+    });
+    this.rawTrace.push(rawDisplay, f.channels);
     if (this.displayMode === "bands" || this.displayMode === "fft") {
       this.bands.update(f);
     }
@@ -198,18 +212,18 @@ export class App {
     this.displayMode = mode;
     if (this.guiState) this.guiState.display = mode;
 
-    const traceCanvas = this.trace.domElement;
-    const bandsCanvas = this.bands.domElement;
     if (mode === "none") {
       this.displayOverlay.style.display = "none";
       return;
     }
-    if (mode !== "trace") {
+    if (mode === "bands" || mode === "fft") {
       this.bands.setMode(mode === "fft" ? "fft" : "bands");
       if (this.latestFrame) this.bands.update(this.latestFrame);
     }
-    traceCanvas.style.display = mode === "trace" ? "block" : "none";
-    bandsCanvas.style.display = mode === "trace" ? "none" : "block";
+    this.trace.domElement.style.display = mode === "trace" ? "block" : "none";
+    this.rawTrace.domElement.style.display = mode === "rawtrace" ? "block" : "none";
+    this.bands.domElement.style.display =
+      mode === "bands" || mode === "fft" ? "block" : "none";
     this.displayOverlay.style.display = "block";
   }
 

@@ -26,7 +26,7 @@ export function installKeyboard(app: App): void {
         break;
       case "x":
       case "X":
-        app.toggleDisplay("bands");
+        app.toggleDisplay("rawtrace"); // raw traces, before processors
         break;
       case "c":
       case "C":

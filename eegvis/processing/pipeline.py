@@ -160,6 +160,7 @@ class Pipeline:
             timestamp=timestamp,
             sample_rate=state.sample_rate,
             channels=channels,
+            raw=raw_latest,
             latest=latest,
             normalized=normalized,
             bands=bands,

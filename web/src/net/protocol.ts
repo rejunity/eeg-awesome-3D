@@ -37,6 +37,7 @@ export interface EEGFramePayload {
   timestamp: number;
   sample_rate: number;
   channels: string[];
+  raw: number[];
   latest: number[];
   normalized: number[];
   bands: Record<string, number[]>;
