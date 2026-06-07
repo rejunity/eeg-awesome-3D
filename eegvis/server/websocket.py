@@ -27,6 +27,9 @@ class _Client:
         self.event = asyncio.Event()
         self.closed = False
         self.task: asyncio.Task | None = None
+        # Rolling counters since the last stats drain (for the broadcast log).
+        self.batches = 0
+        self.frames = 0
 
     def enqueue(self, message: dict) -> None:
         self.buffer.append(message)
@@ -44,6 +47,8 @@ class _Client:
                     continue
                 batch = self.buffer
                 self.buffer = []
+                self.batches += 1
+                self.frames += len(batch)
                 # Send everything accumulated since the last flush as one batch.
                 await self.ws.send_json({"type": "batch", "messages": batch})
         except Exception:
@@ -79,6 +84,16 @@ class ConnectionManager:
     @property
     def client_count(self) -> int:
         return len(self._clients)
+
+    def drain_send_stats(self) -> tuple[int, int]:
+        """Sum (batches, frames) sent since the last call, then reset counters."""
+        batches = frames = 0
+        for client in list(self._clients.values()):
+            batches += client.batches
+            frames += client.frames
+            client.batches = 0
+            client.frames = 0
+        return batches, frames
 
     async def broadcast_json(self, message: dict) -> None:
         # Non-blocking: enqueue to every client's buffer; sender tasks flush.

@@ -135,10 +135,15 @@ class Engine:
                     sent += 1
             # Ground-truth broadcast rate, logged every ~5s while clients listen.
             if tick_start - log_t >= 5.0:
+                batches, frames = self.manager.drain_send_stats()
                 if self.manager.client_count:
+                    dt = tick_start - log_t
+                    per_batch = frames / batches if batches else 0.0
                     print(
-                        f"[eegvis] broadcasting {sent / (tick_start - log_t):.1f} fps"
-                        f" to {self.manager.client_count} client(s)",
+                        f"[eegvis] broadcasting {sent / dt:.1f} fps; sent "
+                        f"{frames} frames in {batches} batches "
+                        f"({per_batch:.1f} frames/batch avg) to "
+                        f"{self.manager.client_count} client(s)",
                         file=sys.stderr,
                     )
                 sent = 0
