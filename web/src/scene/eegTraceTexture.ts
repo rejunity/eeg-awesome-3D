@@ -74,15 +74,17 @@ export class EEGTraceTexture {
     ctx.fillStyle = this.invert ? "rgba(255,255,255,0.5)" : "rgba(5,7,13,0.5)";
     ctx.fillRect(this.writeX, 0, 2, height);
 
-    const offsetY = height / n / (1 + this.overlap);
-    const amplitude = offsetY * 0.9;
+    // Rows span the full panel height; overlap widens the trace amplitude
+    // (so adjacent channels overlap) rather than shrinking the used height.
+    const rowSpacing = height / n;
+    const amplitude = rowSpacing * 0.5 * (1 + this.overlap);
     ctx.strokeStyle = this.invert ? "#101418" : "#a6e3f0";
     ctx.lineWidth = 1;
 
     for (let i = 0; i < n; i++) {
       const v = normalized[i] ?? 0; // [-1, 1]
       const prev = this.prev[i] ?? v;
-      const baseline = offsetY * (i + 0.5);
+      const baseline = rowSpacing * (i + 0.5);
       const y = baseline - v * amplitude;
       const yPrev = baseline - prev * amplitude;
       const xPrev =
@@ -105,12 +107,12 @@ export class EEGTraceTexture {
       height,
     );
 
-    this._drawLabels(n, offsetY);
+    this._drawLabels(n, rowSpacing);
     this.texture.needsUpdate = true;
   }
 
   /** Redraw the channel-name labels in the left gutter (kept on top each frame). */
-  private _drawLabels(n: number, offsetY: number): void {
+  private _drawLabels(n: number, rowSpacing: number): void {
     const ctx = this.ctx;
     const { height } = this.canvas;
     // Opaque gutter so labels stay legible over the scrolling trace.
@@ -121,7 +123,7 @@ export class EEGTraceTexture {
     ctx.fillStyle = this.invert ? "#101418" : "#a6e3f0";
     for (let i = 0; i < n; i++) {
       const label = this.names[i] ?? String(i);
-      ctx.fillText(label, 3, offsetY * (i + 0.5));
+      ctx.fillText(label, 3, rowSpacing * (i + 0.5));
     }
   }
 }
