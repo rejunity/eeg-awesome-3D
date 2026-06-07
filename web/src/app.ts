@@ -172,7 +172,7 @@ export class App {
       return Math.max(-1, Math.min(1, z / sd));
     });
     if (this.electrodes) {
-      this.electrodes.update(f.channels, display, f.bands);
+      this.electrodes.update(f.channels, display);
     }
     this.trace.push(display, f.channels);
     if (this.displayMode === "bands" || this.displayMode === "fft") {

@@ -13,6 +13,16 @@ export function redGreen(normalized: number, intensity = 1.0): Color {
   return new Color().lerpColors(RED, GREEN, t).multiplyScalar(0.4 * intensity * 2.0);
 }
 
+/**
+ * Black-centred electrode colour for a value in [-1, 1]:
+ *   -1 -> red, 0 (running mean) -> black, +1 -> green.
+ * Brightness encodes the magnitude of the deviation; intensity stays constant.
+ */
+export function electrodeColor(value: number): Color {
+  const v = Math.min(1, Math.max(-1, value));
+  return v >= 0 ? new Color(0, v, 0) : new Color(-v, 0, 0);
+}
+
 /** Band-energy colours for the short-Fourier / band display modes. */
 export const BAND_COLORS: Record<string, Color> = {
   delta: new Color(0.4, 0.2, 0.8),

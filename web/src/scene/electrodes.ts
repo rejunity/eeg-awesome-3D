@@ -14,7 +14,9 @@ import {
   Vector3,
 } from "three";
 import type { ElectrodeMeta } from "../net/protocol";
-import { redGreen, BAND_COLORS } from "./colormap";
+import { electrodeColor } from "./colormap";
+
+const BLACK = new Color(0x000000);
 
 interface ElectrodeNode {
   name: string;
@@ -24,7 +26,6 @@ interface ElectrodeNode {
   nominal: Vector3; // nominal position on the ~unit electrode shell
 }
 
-export type ColorMode = "redgreen" | "band";
 export type ElectrodeShape = "sphere" | "cone";
 
 const X_AXIS = new Vector3(1, 0, 0);
@@ -49,8 +50,6 @@ export class Electrodes {
   readonly group = new Group(); // added to the scene at the origin (world == local)
   private nodes = new Map<string, ElectrodeNode>();
   private indicatorsVisible = true;
-  private colorMode: ColorMode = "redgreen";
-  private bandName = "alpha";
   private debugElectrode: string | null = null;
   private shape: ElectrodeShape = "sphere";
 
@@ -60,8 +59,10 @@ export class Electrodes {
 
   constructor(metas: ElectrodeMeta[]) {
     for (const meta of metas) {
+      // Black base so the marker shows only its emissive value colour (so a
+      // value at the running mean reads as black).
       const material = new MeshStandardMaterial({
-        color: 0x222831,
+        color: 0x000000,
         emissive: 0x000000,
         roughness: 0.4,
       });
@@ -90,14 +91,6 @@ export class Electrodes {
 
   toggleIndicators(): void {
     this.setIndicatorsVisible(!this.indicatorsVisible);
-  }
-
-  setColorMode(mode: ColorMode): void {
-    this.colorMode = mode;
-  }
-
-  setBand(name: string): void {
-    this.bandName = name;
   }
 
   setDebugElectrode(name: string | null): void {
@@ -180,13 +173,12 @@ export class Electrodes {
     }
   }
 
-  /** Update from a frame: channels + normalized values (+ optional bands). */
-  update(
-    channels: string[],
-    normalized: number[],
-    bands: Record<string, number[]>,
-  ): void {
-    const bandValues = bands[this.bandName];
+  /**
+   * Update from a frame: per-channel display values in [-1, 1]. Colour maps the
+   * extremes to red/green and 0 (the channel's running mean) to black; the
+   * light intensity is constant.
+   */
+  update(channels: string[], normalized: number[]): void {
     for (let i = 0; i < channels.length; i++) {
       const node = this.nodes.get(normalize(channels[i]));
       if (!node) continue;
@@ -195,31 +187,11 @@ export class Electrodes {
         this.debugElectrode !== null &&
         normalize(node.name) !== this.debugElectrode;
 
-      let color: Color;
-      let intensity: number;
-      if (this.colorMode === "band" && bandValues) {
-        const e = bandValues[i] ?? 0;
-        color = (BAND_COLORS[this.bandName] ?? BAND_COLORS.alpha)
-          .clone()
-          .multiplyScalar(e);
-        intensity = e * 2.5;
-      } else {
-        const v = normalized[i] ?? 0;
-        color = redGreen(v);
-        intensity = (v * 0.5 + 0.5) * 2.5;
-      }
-
-      if (isolated) {
-        color = new Color(0x000000);
-        intensity = 0;
-      }
-
+      const color = isolated ? BLACK : electrodeColor(normalized[i] ?? 0);
       node.material.emissive.copy(color);
       node.material.emissiveIntensity = 1.0;
       node.light.color.copy(color);
-      node.light.intensity = this.indicatorsVisible ? intensity : 0;
-      const scale = 1 + intensity * 0.15;
-      node.mesh.scale.setScalar(scale);
+      node.light.intensity = this.indicatorsVisible && !isolated ? 1 : 0;
     }
   }
 

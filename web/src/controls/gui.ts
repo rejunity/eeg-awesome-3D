@@ -17,7 +17,6 @@ export function installGUI(app: App): GUI {
   const state = {
     preset: PRESETS[0].name,
     display: "none",
-    colorMode: "redgreen",
     band: app.bandDefault,
     colorSD: app.colorSDDefault,
     headCutaway: BrainHead.defaults.cutaway,
@@ -51,11 +50,6 @@ export function installGUI(app: App): GUI {
     .add(state, "colorSD", 0.5, 6.0, 0.1)
     .name("Color SD (±σ)")
     .onChange((v: number) => app.setColorSD(v));
-
-  gui
-    .add(state, "colorMode", ["redgreen", "band"])
-    .name("Electrode colour")
-    .onChange((m: string) => app.electrodes.setColorMode(m as any));
 
   gui
     .add(state, "band", BANDS)

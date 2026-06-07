@@ -17,7 +17,6 @@ export const PRESETS: Preset[] = [
       app.brainHead.setHeadVisible(true);
       app.brainHead.setCutaway(0.72); // default cutaway, brain peeking through
       app.brainHead.setBrainVisible(true);
-      app.electrodes.setColorMode("redgreen");
       app.electrodes.setIndicatorsVisible(true);
       app.setDisplay("none");
       app.setAutoRotate(false);
@@ -29,7 +28,6 @@ export const PRESETS: Preset[] = [
       app.brainHead.setHeadVisible(true);
       app.brainHead.setCutaway(0.45); // top half cut away to reveal the brain
       app.brainHead.setBrainVisible(true);
-      app.electrodes.setColorMode("redgreen");
       app.electrodes.setIndicatorsVisible(true);
       app.setDisplay("none");
       app.setAutoRotate(false);
@@ -40,8 +38,6 @@ export const PRESETS: Preset[] = [
     apply: (app) => {
       app.brainHead.setHeadVisible(false);
       app.brainHead.setBrainVisible(true);
-      app.electrodes.setColorMode("band");
-      app.electrodes.setBand("alpha");
       app.electrodes.setIndicatorsVisible(true);
       app.setDisplay("none");
       app.setAutoRotate(false);
@@ -52,7 +48,6 @@ export const PRESETS: Preset[] = [
     apply: (app) => {
       app.brainHead.setHeadVisible(true);
       app.brainHead.setCutaway(0.7);
-      app.electrodes.setColorMode("redgreen");
       app.showTrace();
       app.setAutoRotate(false);
     },
@@ -62,8 +57,6 @@ export const PRESETS: Preset[] = [
     apply: (app) => {
       app.brainHead.setHeadVisible(false);
       app.brainHead.setBrainVisible(true);
-      app.electrodes.setColorMode("band");
-      app.electrodes.setBand("beta");
       app.electrodes.setIndicatorsVisible(true);
       app.setDisplay("none");
       app.setAutoRotate(false);
@@ -74,7 +67,6 @@ export const PRESETS: Preset[] = [
     apply: (app) => {
       app.brainHead.setHeadVisible(true);
       app.brainHead.setCutaway(0.65);
-      app.electrodes.setColorMode("band");
       app.showBands();
       app.setAutoRotate(false);
     },
@@ -85,7 +77,6 @@ export const PRESETS: Preset[] = [
       app.brainHead.setHeadVisible(true);
       app.brainHead.setCutaway(0.9);
       app.brainHead.setBrainVisible(true);
-      app.electrodes.setColorMode("redgreen");
       app.electrodes.setIndicatorsVisible(true);
       app.setDisplay("none");
       app.setAutoRotate(true);
