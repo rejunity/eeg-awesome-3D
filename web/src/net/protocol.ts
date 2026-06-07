@@ -38,6 +38,8 @@ export interface EEGFramePayload {
   sample_rate: number;
   channels: string[];
   raw: number[];
+  // All raw EEG samples in this chunk: samples[i] = per-channel values.
+  samples: number[][];
   latest: number[];
   normalized: number[];
   bands: Record<string, number[]>;

@@ -21,6 +21,7 @@ export class EEGTraceTexture {
   private channelsToDisplay = 64;
   private overlap = 0.25;
   private names: string[] = [];
+  private labelKey = ""; // redraw the gutter labels only when this changes
 
   constructor(width = 1024, height = 256) {
     this.canvas = document.createElement("canvas");
@@ -54,6 +55,7 @@ export class EEGTraceTexture {
   private clear(): void {
     this.ctx.fillStyle = this.invert ? "#ffffff" : "#05070d";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.labelKey = ""; // force a label redraw after clearing
   }
 
   /**
@@ -107,7 +109,13 @@ export class EEGTraceTexture {
       height,
     );
 
-    this._drawLabels(n, rowSpacing);
+    // The scroll never enters the gutter, so labels only need redrawing when
+    // the channel set changes (important: push() runs per-sample now).
+    const key = `${n}|${names.slice(0, n).join(",")}`;
+    if (key !== this.labelKey) {
+      this.labelKey = key;
+      this._drawLabels(n, rowSpacing);
+    }
     this.texture.needsUpdate = true;
   }
 

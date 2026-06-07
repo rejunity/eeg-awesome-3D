@@ -212,16 +212,28 @@ export class App {
     const sd = this.colorSD || 1;
     let lastDisplay: number[] | null = null;
     let last: EEGFramePayload | null = null;
+    const clampZ = (stats: RunningStats, ch: string, x: number) =>
+      Math.max(-1, Math.min(1, stats.zscore(ch, x) / sd));
+
     for (const f of this.pendingFrames) {
-      const display = f.latest.map((x, i) =>
-        Math.max(-1, Math.min(1, this.stats.zscore(f.channels[i], x) / sd)),
-      );
-      this.trace.push(display, f.channels);
-      const rawDisplay = f.raw.map((x, i) =>
-        Math.max(-1, Math.min(1, this.rawStats.zscore(f.channels[i], x) / sd)),
-      );
-      this.rawTrace.push(rawDisplay, f.channels);
-      lastDisplay = display;
+      // Raw trace: draw every raw sample in the chunk (full source resolution).
+      for (const row of f.samples) {
+        const rd = row.map((x, i) => clampZ(this.rawStats, f.channels[i], x));
+        this.rawTrace.push(rd, f.channels);
+      }
+      // Processed trace: when no band is applied, latest == raw, so draw every
+      // sample; with a band, `latest` is a single per-frame value, draw it once.
+      if (f.samples.length > 0 && this._sameAsRaw(f)) {
+        for (const row of f.samples) {
+          const d = row.map((x, i) => clampZ(this.stats, f.channels[i], x));
+          this.trace.push(d, f.channels);
+          lastDisplay = d;
+        }
+      } else {
+        const d = f.latest.map((x, i) => clampZ(this.stats, f.channels[i], x));
+        this.trace.push(d, f.channels);
+        lastDisplay = d;
+      }
       last = f;
     }
     this.pendingFrames.length = 0;
@@ -233,6 +245,11 @@ export class App {
         this.bands.update(last);
       }
     }
+  }
+
+  /** True when no band processor is active, so `latest` equals the raw sample. */
+  private _sameAsRaw(_f: EEGFramePayload): boolean {
+    return this.band === "none";
   }
 
   /** SD span the electrode colour gradient covers (±colorSD std deviations). */

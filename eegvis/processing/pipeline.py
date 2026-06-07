@@ -123,9 +123,19 @@ class Pipeline:
         if band_out:
             outputs.update(band_out)
 
-        return self._assemble(state, outputs)
+        # Raw EEG samples in this chunk (chunk.data is untouched by processors,
+        # which only mutate the rolling buffer) — sent so the browser can draw
+        # the full source resolution on the trace.
+        if chunk.data.shape[0] and state.eeg_channel_indices:
+            raw_samples = chunk.data[:, state.eeg_channel_indices].astype(float).tolist()
+        else:
+            raw_samples = []
 
-    def _assemble(self, state: ProcessingState, outputs: dict) -> EEGFramePayload:
+        return self._assemble(state, outputs, raw_samples)
+
+    def _assemble(
+        self, state: ProcessingState, outputs: dict, raw_samples: list
+    ) -> EEGFramePayload:
         channels = state.eeg_channel_names
 
         # Always emit the raw last sample per EEG channel (no filtering). A
@@ -161,6 +171,7 @@ class Pipeline:
             sample_rate=state.sample_rate,
             channels=channels,
             raw=raw_latest,
+            samples=raw_samples,
             latest=latest,
             normalized=normalized,
             bands=bands,

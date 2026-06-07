@@ -123,6 +123,10 @@ class EEGFramePayload(BaseModel):
     channels: list[str]
     # Raw last sample per EEG channel, before any processor (band) is applied.
     raw: list[float] = Field(default_factory=list)
+    # All raw EEG samples in this chunk: samples[i] = per-channel values for the
+    # i-th sample. Lets the browser draw the full source resolution on the trace
+    # even though frames arrive in bursts.
+    samples: list[list[float]] = Field(default_factory=list)
     # Post-processor value per channel (band amplitude, or raw if no band).
     latest: list[float]
     normalized: list[float]
