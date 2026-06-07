@@ -6,15 +6,21 @@ import { CanvasTexture, LinearFilter } from "three";
  * advanced per frame, each channel drawn as a stacked horizontal trace with
  * configurable overlap and an invert mode.
  */
+// Minimum row height (px) needed to keep a channel label legible; the panel
+// shows as many channels as fit at this row height.
+const MIN_ROW_HEIGHT = 16;
+const LABEL_GUTTER = 34; // px reserved on the left for channel names
+
 export class EEGTraceTexture {
   readonly texture: CanvasTexture;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private writeX = 0;
+  private writeX = LABEL_GUTTER;
   private prev: number[] = [];
   private invert = false;
-  private channelsToDisplay = 16;
+  private channelsToDisplay = 64;
   private overlap = 0.25;
+  private names: string[] = [];
 
   constructor(width = 1024, height = 256) {
     this.canvas = document.createElement("canvas");
@@ -50,13 +56,20 @@ export class EEGTraceTexture {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  /** Advance one column and plot the latest per-channel normalized values. */
-  push(normalized: number[]): void {
+  /**
+   * Advance one column and plot the latest per-channel values. ``names`` (in the
+   * same order) are drawn as labels in a left gutter. As many channels as fit
+   * the panel (at MIN_ROW_HEIGHT) are shown.
+   */
+  push(normalized: number[], names: string[] = []): void {
     const { width, height } = this.canvas;
     const ctx = this.ctx;
-    const n = Math.min(normalized.length, this.channelsToDisplay);
+    this.names = names;
+    const fit = Math.max(1, Math.floor(height / MIN_ROW_HEIGHT));
+    const n = Math.min(normalized.length, this.channelsToDisplay, fit);
     if (n === 0) return;
 
+    const plotW = width - LABEL_GUTTER;
     // Fade the new column to background (scrolling trail).
     ctx.fillStyle = this.invert ? "rgba(255,255,255,0.5)" : "rgba(5,7,13,0.5)";
     ctx.fillRect(this.writeX, 0, 2, height);
@@ -72,19 +85,43 @@ export class EEGTraceTexture {
       const baseline = offsetY * (i + 0.5);
       const y = baseline - v * amplitude;
       const yPrev = baseline - prev * amplitude;
+      const xPrev =
+        LABEL_GUTTER + ((this.writeX - 1 - LABEL_GUTTER + plotW) % plotW);
       ctx.beginPath();
-      ctx.moveTo((this.writeX - 1 + width) % width, yPrev);
+      ctx.moveTo(xPrev, yPrev);
       ctx.lineTo(this.writeX, y);
       ctx.stroke();
     }
 
     this.prev = normalized.slice(0, n);
-    this.writeX = (this.writeX + 1) % width;
+    this.writeX = LABEL_GUTTER + ((this.writeX + 1 - LABEL_GUTTER) % plotW);
 
     // Draw a moving cursor bar just ahead of the write head.
     ctx.fillStyle = this.invert ? "#000000" : "#313244";
-    ctx.fillRect((this.writeX + 1) % width, 0, 1, height);
+    ctx.fillRect(
+      LABEL_GUTTER + ((this.writeX + 1 - LABEL_GUTTER) % plotW),
+      0,
+      1,
+      height,
+    );
 
+    this._drawLabels(n, offsetY);
     this.texture.needsUpdate = true;
+  }
+
+  /** Redraw the channel-name labels in the left gutter (kept on top each frame). */
+  private _drawLabels(n: number, offsetY: number): void {
+    const ctx = this.ctx;
+    const { height } = this.canvas;
+    // Opaque gutter so labels stay legible over the scrolling trace.
+    ctx.fillStyle = this.invert ? "#ffffff" : "#05070d";
+    ctx.fillRect(0, 0, LABEL_GUTTER, height);
+    ctx.font = "11px ui-monospace, monospace";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = this.invert ? "#101418" : "#a6e3f0";
+    for (let i = 0; i < n; i++) {
+      const label = this.names[i] ?? String(i);
+      ctx.fillText(label, 3, offsetY * (i + 0.5));
+    }
   }
 }

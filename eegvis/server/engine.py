@@ -187,3 +187,7 @@ class Engine:
 
     async def broadcast_status(self) -> None:
         await self.manager.broadcast_json(self.status.model_dump())
+
+    def set_band(self, band: str | None) -> None:
+        """Select the band applied to raw data (None = raw pass-through)."""
+        self.pipeline.set_band(band)

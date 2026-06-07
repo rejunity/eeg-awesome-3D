@@ -4,7 +4,7 @@ import { PRESETS } from "../scene/presets";
 import { BrainHead } from "../scene/brainHead";
 import type { ElectrodeShape } from "../scene/electrodes";
 
-const BANDS = ["delta", "theta", "alpha", "beta", "gamma"];
+const BANDS = ["none", "delta", "theta", "alpha", "beta", "gamma"];
 
 /**
  * Runtime GUI (lil-gui), recreating the spirit of the Unity controls:
@@ -18,7 +18,7 @@ export function installGUI(app: App): GUI {
     preset: PRESETS[0].name,
     display: "none",
     colorMode: "redgreen",
-    band: "alpha",
+    band: app.bandDefault,
     colorSD: app.colorSDDefault,
     headCutaway: BrainHead.defaults.cutaway,
     indicators: true,
@@ -59,8 +59,9 @@ export function installGUI(app: App): GUI {
 
   gui
     .add(state, "band", BANDS)
-    .name("Band")
-    .onChange((b: string) => app.electrodes.setBand(b));
+    .name("Band processor")
+    .listen()
+    .onChange((b: string) => app.setBand(b));
 
   gui
     .add(state, "headCutaway", 0, 1, 0.01)

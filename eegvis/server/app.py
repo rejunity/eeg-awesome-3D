@@ -85,9 +85,9 @@ def create_app(config: AppConfig, synthetic: bool = False) -> FastAPI:
             await manager.send_json(ws, engine.latest_frame.model_dump())
         try:
             while True:
-                # We don't expect client messages, but keep the socket alive and
-                # detect disconnects.
-                await ws.receive_text()
+                # Client may send small control messages (e.g. band selection).
+                text = await ws.receive_text()
+                _handle_client_message(engine, text)
         except WebSocketDisconnect:
             pass
         finally:
@@ -150,6 +150,19 @@ class IdleShutdown:
         if self._pending is not None:
             self._pending.cancel()
             self._pending = None
+
+
+def _handle_client_message(engine: Engine, text: str) -> None:
+    """Apply a control message from a browser client (best-effort)."""
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError):
+        return
+    if not isinstance(data, dict):
+        return
+    if data.get("type") == "set_band":
+        band = data.get("band")
+        engine.set_band(band if band in (None, "delta", "theta", "alpha", "beta", "gamma") else None)
 
 
 async def _status_broadcaster(engine: Engine, interval: float = 2.0) -> None:

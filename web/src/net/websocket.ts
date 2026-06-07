@@ -30,6 +30,13 @@ export class EEGSocket {
     this.open();
   }
 
+  /** Send a control message to the backend (no-op if not connected). */
+  send(message: unknown): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+    }
+  }
+
   private open(): void {
     const ws = new WebSocket(this.url);
     this.ws = ws;

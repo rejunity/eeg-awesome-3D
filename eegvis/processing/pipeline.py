@@ -23,6 +23,7 @@ from ..models import (
     QualityPayload,
     StreamMetadata,
 )
+from .band_select import BandSelectProcessor
 from .registry import create_processor
 
 
@@ -33,6 +34,10 @@ class Pipeline:
             create_processor(p.name, p.enabled, p.options())
             for p in config.processors
         ]
+        # Always-present, runtime-selectable band processor applied to the raw
+        # buffer (before the browser normalises/colours). Defaults to None
+        # (raw pass-through).
+        self.band_select = BandSelectProcessor()
         self._metadata: StreamMetadata | None = None
         self._state: ProcessingState | None = None
         self._window_samples = 0
@@ -41,6 +46,10 @@ class Pipeline:
         # Last FFT block, reused on frames where the throttled FFT processor
         # produced nothing.
         self._last_fft: dict | None = None
+
+    def set_band(self, band: str | None) -> None:
+        """Select the band applied to raw data (None = raw pass-through)."""
+        self.band_select.set_band(band)
 
     @property
     def enabled_processors(self):
@@ -62,6 +71,7 @@ class Pipeline:
         for p in self.processors:
             p.configure(metadata)
             p.reset()
+        self.band_select.configure(metadata)
 
     def reset(self) -> None:
         if self._metadata is not None:
@@ -106,6 +116,12 @@ class Pipeline:
             result = proc.process(chunk, state)
             if result:
                 outputs.update(result)
+
+        # Band processor runs last so its `latest` reflects the selected band
+        # (or raw pass-through) regardless of any configured processors.
+        band_out = self.band_select.process(chunk, state)
+        if band_out:
+            outputs.update(band_out)
 
         return self._assemble(state, outputs)
 

@@ -62,6 +62,9 @@ export class App {
   private stats = new RunningStats();
   readonly colorSDDefault = 2.5;
   private colorSD = this.colorSDDefault;
+  // Band processor applied on the backend to raw data ("none" = pass-through).
+  readonly bandDefault = "none";
+  private band = this.bandDefault;
 
   // Set by installGUI so presets can keep GUI widgets in sync.
   guiState: Record<string, unknown> | null = null;
@@ -131,7 +134,21 @@ export class App {
     this.socket.onStatus = (s) => this.handleStatus(s);
     this.socket.onFrame = (f) => this.handleFrame(f);
     this.socket.onClose = () => this.setStatusText("disconnected — reconnecting…", false);
+    // Sync the band selection to the backend on (re)connect.
+    this.socket.onOpen = () => this._sendBand();
     this.socket.connect();
+  }
+
+  private _sendBand(): void {
+    this.socket.send({ type: "set_band", band: this.band === "none" ? null : this.band });
+  }
+
+  /** Select the backend band processor applied to raw data ("none" = off). */
+  setBand(band: string): void {
+    this.band = band;
+    this.stats = new RunningStats(); // re-baseline; the signal changed
+    this._sendBand();
+    if (this.guiState) this.guiState.band = band;
   }
 
   private handleStatus(s: StatusPayload): void {
@@ -157,7 +174,7 @@ export class App {
     if (this.electrodes) {
       this.electrodes.update(f.channels, display, f.bands);
     }
-    this.trace.push(display);
+    this.trace.push(display, f.channels);
     if (this.displayMode === "bands" || this.displayMode === "fft") {
       this.bands.update(f);
     }
