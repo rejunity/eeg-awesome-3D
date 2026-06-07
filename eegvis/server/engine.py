@@ -13,6 +13,7 @@ or a burst of samples never builds an unbounded backlog.
 from __future__ import annotations
 
 import asyncio
+import sys
 import queue
 import time
 
@@ -120,6 +121,8 @@ class Engine:
 
     async def _run(self) -> None:
         period = 1.0 / max(self.config.processing.output_hz, 1.0)
+        sent = 0
+        log_t = time.monotonic()
         while not self._stop.is_set():
             tick_start = time.monotonic()
             chunk = self._collect_chunk()
@@ -129,6 +132,17 @@ class Engine:
                 if frame is not None:
                     self.latest_frame = frame
                     await self.manager.broadcast_json(frame.model_dump())
+                    sent += 1
+            # Ground-truth broadcast rate, logged every ~5s while clients listen.
+            if tick_start - log_t >= 5.0:
+                if self.manager.client_count:
+                    print(
+                        f"[eegvis] broadcasting {sent / (tick_start - log_t):.1f} fps"
+                        f" to {self.manager.client_count} client(s)",
+                        file=sys.stderr,
+                    )
+                sent = 0
+                log_t = tick_start
             elapsed = time.monotonic() - tick_start
             await asyncio.sleep(max(0.0, period - elapsed))
 

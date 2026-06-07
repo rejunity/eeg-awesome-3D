@@ -22,7 +22,10 @@ export class EEGSocket {
 
   constructor(path = "/ws/eeg") {
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    this.url = `${proto}://${location.host}${path}`;
+    // Under the Vite dev server (port 5173), connect straight to the backend
+    // instead of through Vite's WebSocket proxy, which throttles the stream.
+    const host = location.port === "5173" ? "127.0.0.1:8765" : location.host;
+    this.url = `${proto}://${host}${path}`;
   }
 
   connect(): void {

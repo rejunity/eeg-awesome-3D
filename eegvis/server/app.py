@@ -78,6 +78,7 @@ def create_app(config: AppConfig, synthetic: bool = False) -> FastAPI:
     @app.websocket("/ws/eeg")
     async def ws_eeg(ws: WebSocket) -> None:
         await manager.connect(ws)
+        _enable_tcp_nodelay(ws)  # avoid Nagle/delayed-ACK stalls on small frames
         shutdown.on_connect()
         # Send current status immediately on connect.
         await manager.send_json(ws, engine.status.model_dump())
@@ -150,6 +151,24 @@ class IdleShutdown:
         if self._pending is not None:
             self._pending.cancel()
             self._pending = None
+
+
+def _enable_tcp_nodelay(ws: WebSocket) -> None:
+    """Disable Nagle on the WebSocket's TCP socket (best-effort, uvicorn-specific).
+
+    Without this, the server's small per-frame sends interact with the client's
+    TCP delayed-ACK (~200 ms) and stall, capping throughput near 5 Hz.
+    """
+    import socket as _socket
+
+    try:
+        transport = getattr(getattr(ws, "_send", None), "__self__", None)
+        transport = getattr(transport, "transport", None)
+        sock = transport.get_extra_info("socket") if transport is not None else None
+        if sock is not None:
+            sock.setsockopt(_socket.IPPROTO_TCP, _socket.TCP_NODELAY, 1)
+    except Exception:
+        pass
 
 
 def _handle_client_message(engine: Engine, text: str) -> None:
