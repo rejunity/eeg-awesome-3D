@@ -43,6 +43,12 @@ export class App {
   private autoRotate = false;
   private displayMode: DisplayMode = "none";
 
+  // HUD: stream info text + measured received-frame rate (EMA, Hz).
+  private streamInfoText = "";
+  private recvRate = 0;
+  private lastFrameT = 0;
+  private lastMetaRender = 0;
+
   // Electrode-array placement params. pitch/height orient the nominal shell
   // (height in the array's local, pitched frame); distance is the gap from the
   // scalp; shape selects sphere/cone. Changing any of these re-projects the
@@ -162,16 +168,39 @@ export class App {
   private handleStatus(s: StatusPayload): void {
     const text = `${s.mode}${s.message ? " — " + s.message : ""}`;
     this.setStatusText(text, s.connected);
+    this.streamInfoText = s.stream
+      ? `${s.stream.name} · ${s.stream.channel_count}ch @ ${s.stream.sample_rate}Hz`
+      : "";
+    this._renderMeta();
+  }
+
+  /** HUD meta line: stream info plus the measured received-frame rate. */
+  private _renderMeta(): void {
     const meta = document.getElementById("meta");
-    if (meta) {
-      meta.textContent = s.stream
-        ? `${s.stream.name} · ${s.stream.channel_count}ch @ ${s.stream.sample_rate}Hz`
-        : "";
-    }
+    if (!meta) return;
+    const rate =
+      this.recvRate > 0 ? ` · recv ${this.recvRate.toFixed(1)}Hz` : "";
+    meta.textContent = this.streamInfoText + rate;
   }
 
   private handleFrame(f: EEGFramePayload): void {
     this.latestFrame = f;
+
+    // Measure received-frame rate (EMA of 1/Δt) and refresh the HUD ~4x/sec.
+    const now = performance.now();
+    if (this.lastFrameT > 0) {
+      const dt = (now - this.lastFrameT) / 1000;
+      if (dt > 0) {
+        const inst = 1 / dt;
+        this.recvRate = this.recvRate > 0 ? this.recvRate * 0.9 + inst * 0.1 : inst;
+      }
+    }
+    this.lastFrameT = now;
+    if (now - this.lastMetaRender > 250) {
+      this.lastMetaRender = now;
+      this._renderMeta();
+    }
+
     // No backend filtering: map each raw value to a z-score via the per-channel
     // running mean/SD, then scale to [-1, 1] over ±colorSD standard deviations.
     const sd = this.colorSD || 1;
