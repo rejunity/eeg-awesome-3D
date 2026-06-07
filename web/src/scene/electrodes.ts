@@ -14,7 +14,7 @@ import {
   Vector3,
 } from "three";
 import type { ElectrodeMeta } from "../net/protocol";
-import { electrodeColor } from "./colormap";
+import { electrodeColor, type ColorScheme } from "./colormap";
 
 const BLACK = new Color(0x000000);
 
@@ -51,6 +51,7 @@ export class Electrodes {
   private nodes = new Map<string, ElectrodeNode>();
   private indicatorsVisible = true;
   private debugElectrode: string | null = null;
+  private colorScheme: ColorScheme = "red-green";
   private shape: ElectrodeShape = "sphere";
 
   private readonly sphereGeo = new SphereGeometry(0.04, 16, 12);
@@ -95,6 +96,10 @@ export class Electrodes {
 
   setDebugElectrode(name: string | null): void {
     this.debugElectrode = name ? normalize(name) : null;
+  }
+
+  setColorScheme(scheme: ColorScheme): void {
+    this.colorScheme = scheme;
   }
 
   setShape(shape: ElectrodeShape): void {
@@ -187,7 +192,9 @@ export class Electrodes {
         this.debugElectrode !== null &&
         normalize(node.name) !== this.debugElectrode;
 
-      const color = isolated ? BLACK : electrodeColor(normalized[i] ?? 0);
+      const color = isolated
+        ? BLACK
+        : electrodeColor(normalized[i] ?? 0, this.colorScheme);
       node.material.emissive.copy(color);
       node.material.emissiveIntensity = 1.0;
       node.light.color.copy(color);

@@ -13,13 +13,19 @@ export function redGreen(normalized: number, intensity = 1.0): Color {
   return new Color().lerpColors(RED, GREEN, t).multiplyScalar(0.4 * intensity * 2.0);
 }
 
+export type ColorScheme = "red-green" | "blue-yellow";
+
 /**
- * Black-centred electrode colour for a value in [-1, 1]:
- *   -1 -> red, 0 (running mean) -> black, +1 -> green.
- * Brightness encodes the magnitude of the deviation; intensity stays constant.
+ * Black-centred electrode colour for a value in [-1, 1]. 0 (the running mean)
+ * maps to black and brightness encodes the deviation magnitude:
+ *   red-green:   -1 -> red,  +1 -> green
+ *   blue-yellow: -1 -> blue, +1 -> yellow
  */
-export function electrodeColor(value: number): Color {
+export function electrodeColor(value: number, scheme: ColorScheme = "red-green"): Color {
   const v = Math.min(1, Math.max(-1, value));
+  if (scheme === "blue-yellow") {
+    return v >= 0 ? new Color(v, v, 0) : new Color(0, 0, -v);
+  }
   return v >= 0 ? new Color(0, v, 0) : new Color(-v, 0, 0);
 }
 

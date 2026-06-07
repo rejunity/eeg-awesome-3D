@@ -3,6 +3,7 @@ import type { App } from "../app";
 import { PRESETS } from "../scene/presets";
 import { BrainHead } from "../scene/brainHead";
 import type { ElectrodeShape } from "../scene/electrodes";
+import type { ColorScheme } from "../scene/colormap";
 
 const BANDS = ["none", "delta", "theta", "alpha", "beta", "gamma"];
 
@@ -18,6 +19,7 @@ export function installGUI(app: App): GUI {
     preset: PRESETS[0].name,
     display: "none",
     band: app.bandDefault,
+    colorScheme: "red-green",
     colorSD: app.colorSDDefault,
     headCutaway: BrainHead.defaults.cutaway,
     indicators: true,
@@ -45,6 +47,11 @@ export function installGUI(app: App): GUI {
     .name("Display")
     .listen()
     .onChange((mode: string) => app.setDisplay(mode as any));
+
+  gui
+    .add(state, "colorScheme", ["red-green", "blue-yellow"])
+    .name("Color scheme")
+    .onChange((v: string) => app.electrodes.setColorScheme(v as ColorScheme));
 
   gui
     .add(state, "colorSD", 0.5, 6.0, 0.1)
