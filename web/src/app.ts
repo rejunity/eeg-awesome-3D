@@ -5,6 +5,7 @@ import { Electrodes, type ElectrodeShape } from "./scene/electrodes";
 import { EEGTraceTexture } from "./scene/eegTraceTexture";
 import { BandTexture } from "./scene/bandTexture";
 import { RunningStats } from "./scene/runningStats";
+import { Resampler } from "./scene/resampler";
 import { PRESETS } from "./scene/presets";
 import { EEGSocket } from "./net/websocket";
 import type {
@@ -77,6 +78,12 @@ export class App {
   // Band processor applied on the backend to raw data ("none" = pass-through).
   readonly bandDefault = "none";
   private band = this.bandDefault;
+
+  // Resampler: plays the fixed-rate sample stream back on the render clock.
+  private resampler = new Resampler();
+  private channels: string[] = [];
+  // Latest per-frame band display (band mode only; band output is per-frame).
+  private bandDisplay: number[] | null = null;
 
   // Set by installGUI so presets can keep GUI widgets in sync.
   guiState: Record<string, unknown> | null = null;
@@ -174,6 +181,7 @@ export class App {
     this.streamInfoText = s.stream
       ? `${s.stream.name} · ${s.stream.channel_count}ch @ ${s.stream.sample_rate}Hz`
       : "";
+    if (s.stream) this.resampler.setRate(s.stream.sample_rate);
     this._renderMeta();
   }
 
@@ -202,54 +210,53 @@ export class App {
   }
 
   /**
-   * Drain buffered frames (called from the render loop). Every frame feeds the
-   * traces (so the strip charts keep full resolution), but only the most recent
-   * frame drives the 3D electrodes / band panel — i.e. the renderer skips stale
-   * frames for the expensive 3D update when it falls behind.
+   * Called every render frame. Moves any newly-received samples into the
+   * resampler, then plays back the buffered samples aligned to the render clock
+   * (so bursty arrivals become a steady stream). Every played-back sample feeds
+   * the traces at full resolution; the most recent drives the 3D electrodes.
+   * With a band selected its (per-frame) value drives the processed trace and
+   * electrodes instead, while the raw trace stays full resolution.
    */
-  private consumeFrames(): void {
-    if (this.pendingFrames.length === 0) return;
+  private consumeFrames(nowMs: number): void {
     const sd = this.colorSD || 1;
-    let lastDisplay: number[] | null = null;
-    let last: EEGFramePayload | null = null;
     const clampZ = (stats: RunningStats, ch: string, x: number) =>
       Math.max(-1, Math.min(1, stats.zscore(ch, x) / sd));
 
+    // 1) Ingest newly received frames: raw samples -> resampler buffer.
     for (const f of this.pendingFrames) {
-      // Raw trace: draw every raw sample in the chunk (full source resolution).
-      for (const row of f.samples) {
-        const rd = row.map((x, i) => clampZ(this.rawStats, f.channels[i], x));
-        this.rawTrace.push(rd, f.channels);
-      }
-      // Processed trace: when no band is applied, latest == raw, so draw every
-      // sample; with a band, `latest` is a single per-frame value, draw it once.
-      if (f.samples.length > 0 && this._sameAsRaw(f)) {
-        for (const row of f.samples) {
-          const d = row.map((x, i) => clampZ(this.stats, f.channels[i], x));
-          this.trace.push(d, f.channels);
-          lastDisplay = d;
-        }
-      } else {
+      this.channels = f.channels;
+      this.latestFrame = f;
+      this.resampler.push(f.samples);
+      if (this.band !== "none") {
         const d = f.latest.map((x, i) => clampZ(this.stats, f.channels[i], x));
-        this.trace.push(d, f.channels);
-        lastDisplay = d;
+        this.bandDisplay = d;
+        this.trace.push(d, f.channels); // processed trace (per-frame band value)
       }
-      last = f;
     }
     this.pendingFrames.length = 0;
 
-    if (last && lastDisplay) {
-      this.latestFrame = last;
-      if (this.electrodes) this.electrodes.update(last.channels, lastDisplay);
-      if (this.displayMode === "bands" || this.displayMode === "fft") {
-        this.bands.update(last);
+    // 2) Play back buffered raw samples at the source rate, on the render clock.
+    const rows = this.resampler.drain(nowMs);
+    let lastRawDisplay: number[] | null = null;
+    for (const row of rows) {
+      const rawD = row.map((x, i) => clampZ(this.rawStats, this.channels[i], x));
+      this.rawTrace.push(rawD, this.channels);
+      if (this.band === "none") {
+        const d = row.map((x, i) => clampZ(this.stats, this.channels[i], x));
+        this.trace.push(d, this.channels);
+        lastRawDisplay = d;
       }
     }
-  }
 
-  /** True when no band processor is active, so `latest` equals the raw sample. */
-  private _sameAsRaw(_f: EEGFramePayload): boolean {
-    return this.band === "none";
+    // 3) Electrodes + band panel from the most recent value.
+    const elec = this.band === "none" ? lastRawDisplay : this.bandDisplay;
+    if (this.electrodes && elec) this.electrodes.update(this.channels, elec);
+    if (
+      (this.displayMode === "bands" || this.displayMode === "fft") &&
+      this.latestFrame
+    ) {
+      this.bands.update(this.latestFrame);
+    }
   }
 
   /** SD span the electrode colour gradient covers (±colorSD std deviations). */
@@ -378,9 +385,8 @@ export class App {
 
   private renderLoop = (): void => {
     requestAnimationFrame(this.renderLoop);
-    // Apply any frames received since the last render (skipping stale ones for
-    // the 3D view).
-    this.consumeFrames();
+    // Ingest received samples and play them back on the render clock.
+    this.consumeFrames(performance.now());
     const dt = this.clock.getDelta();
     for (const h of this.tickHandlers) h(dt);
     if (this.autoRotate) {
