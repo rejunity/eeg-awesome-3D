@@ -1,15 +1,19 @@
 """Runtime-selectable band processor.
 
-Reads the sliding window (before the browser's running-mean/SD normalisation
-and colouring). Three run rates (set from the UI):
+Operates purely on the GLOBAL sliding window of the latest N samples
+(``ProcessingState.rolling_data`` — the single source of truth, kept current by
+the pipeline). The processor is a pure function of that window: every run it
+reads the most recent span it needs (``latest(state, seconds)``) and band-pass
+filters it from scratch — no streaming / per-processor filter state. The result
+is therefore independent of how often the processor is executed.
 
-- "per-sample": a stateful band-pass filter is applied to every new sample, so
-  the output is a continuous per-sample stream (``band_samples``) that the
-  browser plays back through its resampler at the full source resolution — the
-  band trace then matches the raw trace's speed/smoothness.
-- "realtime" / "frequency": a Hann-windowed periodogram gives a single
-  per-channel band *amplitude* (``latest``), recomputed on each new chunk or at
-  run_hz; the browser eases it to avoid stepped transitions.
+Filter rate (how often it runs / what it emits):
+
+- "per-sample": emit the filtered value for every sample appended to the window
+  since the last run (``band_samples``) — a continuous stream the browser plays
+  back at the raw-trace speed.
+- "realtime" / "frequency": emit a single per-channel band *amplitude* (RMS of
+  the filtered window) on each new chunk / at run_hz; the browser eases it.
 
 When the band is ``None`` it passes the raw last sample through unchanged.
 """
@@ -29,8 +33,6 @@ BANDS: dict[str, tuple[float, float]] = {
     "beta": (13.0, 30.0),
     "gamma": (30.0, 45.0),
 }
-# Cycles of the band's lowest frequency to include in the windowed estimate.
-_CYCLES = 5.0
 
 
 class BandSelectProcessor(EEGProcessor):
@@ -42,8 +44,7 @@ class BandSelectProcessor(EEGProcessor):
         self.band = band if band in BANDS else None
         self._sample_rate = 0.0
         self._latest: list[float] | None = None  # cached windowed amplitude
-        self._sos: np.ndarray | None = None  # per-sample band-pass
-        self._zi: np.ndarray | None = None
+        self._sos: np.ndarray | None = None
 
     def configure(self, metadata: StreamMetadata) -> None:
         self._sample_rate = metadata.nominal_srate
@@ -52,13 +53,11 @@ class BandSelectProcessor(EEGProcessor):
 
     def reset(self) -> None:
         super().reset()
-        self._zi = None
         self._latest = None
 
     def set_band(self, band: str | None) -> None:
         self.band = band if band in BANDS else None
         self._design()
-        self._zi = None
         self._latest = None
 
     def _design(self) -> None:
@@ -73,53 +72,49 @@ class BandSelectProcessor(EEGProcessor):
             btype="bandpass", output="sos",
         )
 
-    # The pipeline calls run(); band_select manages its own cadence (including
-    # the streaming per-sample mode), so it overrides run() rather than process.
+    def _span_seconds(self) -> float:
+        # Enough of the window for the filter to settle for the band's lowest
+        # frequency: the oldest part of the span carries the start-up transient,
+        # the recent samples we actually use/emit are settled. latest() clamps
+        # this to whatever the global window currently holds.
+        lo, _ = BANDS[self.band]  # type: ignore[index]
+        return max(2.0, 8.0 / lo)
+
+    # The pipeline calls run(); band_select reads the global window directly and
+    # manages its own cadence, so it overrides run() rather than process().
     def run(self, state: ProcessingState, now: float, has_new_data: bool) -> dict:
         if self.band is None:
             eeg = self.latest(state)
             return {"latest": eeg[-1, :].astype(float).tolist()} if eeg.shape[0] else {}
+        if self._sos is None:
+            return {}
+
+        win = self.latest(state, self._span_seconds())  # latest span of the window
+        if win.shape[0] < 16 or win.shape[1] == 0:
+            return {}
+        # Band-pass the window from scratch (stateless) — a pure function of the
+        # window, so the result does not depend on the execution frequency.
+        filtered = sp_signal.sosfilt(self._sos, win.astype(np.float64), axis=0)
 
         if self.run_mode == "per-sample":
-            return self._per_sample(state)
+            # Emit the filtered value for each sample the window gained this tick.
+            m = min(state.last_appended, filtered.shape[0])
+            if m == 0:
+                return {}
+            return {
+                "band_samples": filtered[-m:, :].astype(float).tolist(),
+                "latest": filtered[-1, :].astype(float).tolist(),
+            }
 
-        # Windowed amplitude, recomputed per cadence; reused between runs.
+        # Windowed amplitude (RMS of the band-filtered window), per cadence.
         if self.run_mode == "frequency":
             due = (now - self._last_run_t) >= (1.0 / max(self.run_hz, 0.01))
         else:  # realtime
             due = has_new_data
         if due:
             self._last_run_t = now
-            amp = self._windowed(state)
-            if amp is not None:
-                self._latest = amp
+            self._latest = np.sqrt(np.mean(filtered**2, axis=0)).astype(float).tolist()
         return {"latest": self._latest} if self._latest is not None else {}
 
     def process(self, state: ProcessingState) -> dict:  # unused; run() is the entry
         return self.run(state, self._last_run_t, True)
-
-    def _per_sample(self, state: ProcessingState) -> dict:
-        x = self.new_samples(state).astype(np.float64)  # (n_new, n_eeg)
-        if self._sos is None or x.shape[0] == 0:
-            return {}
-        n_ch = x.shape[1]
-        if self._zi is None or self._zi.shape[2] != n_ch:
-            zi0 = sp_signal.sosfilt_zi(self._sos)  # (n_sections, 2)
-            self._zi = np.repeat(zi0[:, :, None], n_ch, axis=2) * x[0, :][None, None, :]
-        y, self._zi = sp_signal.sosfilt(self._sos, x, axis=0, zi=self._zi)
-        return {"band_samples": y.astype(float).tolist(), "latest": y[-1, :].astype(float).tolist()}
-
-    def _windowed(self, state: ProcessingState) -> list[float] | None:
-        sr = state.sample_rate or self._sample_rate
-        lo, hi = BANDS[self.band]
-        eeg = self.latest(state, _CYCLES / lo)  # span scales with the band
-        n = eeg.shape[0]
-        if sr <= 0 or n < 16 or eeg.shape[1] == 0:
-            return None
-        spectrum = np.fft.rfft(eeg * np.hanning(n)[:, None], axis=0)
-        psd = (np.abs(spectrum) ** 2) / n
-        freqs = np.fft.rfftfreq(n, d=1.0 / sr)
-        mask = (freqs >= lo) & (freqs < hi)
-        if not mask.any():
-            return [0.0] * eeg.shape[1]
-        return np.sqrt(psd[mask, :].mean(axis=0)).astype(float).tolist()
