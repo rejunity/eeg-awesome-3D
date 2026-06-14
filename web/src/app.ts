@@ -86,12 +86,8 @@ export class App {
   // Resampler: plays the fixed-rate sample stream back on the render clock.
   private resampler = new Resampler();
   private channels: string[] = [];
-  // Band mode (per-frame, stepped): the latest target and the render-rate eased
-  // value, so the band trace/electrodes are smooth instead of rectangular.
-  private bandTarget: number[] | null = null;
-  private bandEased: number[] | null = null;
-  // Per-sample band mode: its own resampler + running stats so the band trace
-  // plays back at the raw-trace speed.
+  // Band mode: its own resampler + running stats so the band (filtered) stream
+  // plays back at the raw-trace speed, the same in every filter rate.
   private bandResampler = new Resampler();
   private bandStats = new RunningStats();
 
@@ -189,8 +185,6 @@ export class App {
     this.band = band;
     this.stats = new RunningStats(); // re-baseline; the signal changed
     this.bandStats = new RunningStats();
-    this.bandTarget = null;
-    this.bandEased = null;
     this._sendBand();
     if (this.guiState) this.guiState.band = band;
   }
@@ -253,20 +247,18 @@ export class App {
     const clampZ = (stats: RunningStats, ch: string, x: number) =>
       Math.max(-1, Math.min(1, stats.zscore(ch, x) / sd));
 
-    const perSample = this.band !== "none" && this.bandRunMode === "per-sample";
+    const bandActive = this.band !== "none";
 
-    // 1) Ingest newly received frames. Raw samples -> resampler. For the band:
-    // per-sample mode feeds its own resampler (full-resolution stream); the
-    // windowed modes record a per-frame target to ease toward (the value only
-    // changes per burst, so pushing it directly would look rectangular).
+    // 1) Ingest newly received frames. Raw samples -> resampler. The band emits
+    // the same per-sample filtered signal in every filter rate (frequency just
+    // delivers it in larger batches), so always feed band_samples to the band
+    // resampler — playback then matches the raw trace regardless of rate.
     for (const f of this.pendingFrames) {
       this.channels = f.channels;
       this.latestFrame = f;
       this.resampler.push(f.samples);
-      if (perSample) {
-        if (f.band_samples.length) this.bandResampler.push(f.band_samples);
-      } else if (this.band !== "none") {
-        this.bandTarget = f.latest.map((x, i) => clampZ(this.stats, f.channels[i], x));
+      if (bandActive && f.band_samples.length) {
+        this.bandResampler.push(f.band_samples);
       }
     }
     this.pendingFrames.length = 0;
@@ -284,27 +276,15 @@ export class App {
       }
     }
 
-    // 3) Band processed trace + electrodes.
+    // 3) Band processed trace + electrodes: play the band stream at the source
+    // rate, exactly like the raw trace.
     let elec = lastRawDisplay;
-    if (perSample) {
-      // Play the per-sample band stream at the source rate, like the raw trace.
+    if (bandActive) {
       for (const row of this.bandResampler.drain(nowMs)) {
         const d = row.map((x, i) => clampZ(this.bandStats, this.channels[i], x));
         this.trace.push(d, this.channels);
         elec = d;
       }
-    } else if (this.band !== "none" && this.bandTarget) {
-      // Windowed band: ease the per-frame value so transitions aren't stepped.
-      const k = 0.15;
-      if (!this.bandEased || this.bandEased.length !== this.bandTarget.length) {
-        this.bandEased = [...this.bandTarget];
-      } else {
-        for (let i = 0; i < this.bandTarget.length; i++) {
-          this.bandEased[i] += (this.bandTarget[i] - this.bandEased[i]) * k;
-        }
-      }
-      this.trace.push(this.bandEased, this.channels);
-      elec = this.bandEased;
     }
     if (this.electrodes && elec) this.electrodes.update(this.channels, elec);
     if (

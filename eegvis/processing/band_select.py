@@ -7,13 +7,19 @@ reads the most recent span it needs (``latest(state, seconds)``) and band-pass
 filters it from scratch — no streaming / per-processor filter state. The result
 is therefore independent of how often the processor is executed.
 
-Filter rate (how often it runs / what it emits):
+Every filter rate emits the SAME quantity — the band-pass filtered signal
+(``band_samples``, one per-channel value per sample). The rate only controls how
+often / in how large a batch those samples are delivered, never their values:
 
-- "per-sample": emit the filtered value for every sample appended to the window
-  since the last run (``band_samples``) — a continuous stream the browser plays
-  back at the raw-trace speed.
-- "realtime" / "frequency": emit a single per-channel band *amplitude* (RMS of
-  the filtered window) on each new chunk / at run_hz; the browser eases it.
+- "realtime" / "per-sample": emit the filtered value for every sample the window
+  gained this tick.
+- "frequency": accumulate and emit the filtered values for all samples since the
+  last emit, run_hz times per second (larger batches, identical values).
+
+Because the filter is applied to the global window from scratch each run, the
+filtered value at a given sample is the same regardless of the rate (once that
+sample has settled), so the rendered traces match across rates. ``latest`` also
+carries the per-channel RMS of the filtered window as a stable amplitude.
 
 When the band is ``None`` it passes the raw last sample through unchanged.
 """
@@ -43,8 +49,8 @@ class BandSelectProcessor(EEGProcessor):
         super().__init__(enabled=True)
         self.band = band if band in BANDS else None
         self._sample_rate = 0.0
-        self._latest: list[float] | None = None  # cached windowed amplitude
         self._sos: np.ndarray | None = None
+        self._pending = 0  # samples awaiting emission in "frequency" mode
 
     def configure(self, metadata: StreamMetadata) -> None:
         self._sample_rate = metadata.nominal_srate
@@ -53,12 +59,12 @@ class BandSelectProcessor(EEGProcessor):
 
     def reset(self) -> None:
         super().reset()
-        self._latest = None
+        self._pending = 0
 
     def set_band(self, band: str | None) -> None:
         self.band = band if band in BANDS else None
         self._design()
-        self._latest = None
+        self._pending = 0
 
     def _design(self) -> None:
         sr = self._sample_rate
@@ -72,14 +78,6 @@ class BandSelectProcessor(EEGProcessor):
             btype="bandpass", output="sos",
         )
 
-    def _span_seconds(self) -> float:
-        # Enough of the window for the filter to settle for the band's lowest
-        # frequency: the oldest part of the span carries the start-up transient,
-        # the recent samples we actually use/emit are settled. latest() clamps
-        # this to whatever the global window currently holds.
-        lo, _ = BANDS[self.band]  # type: ignore[index]
-        return max(2.0, 8.0 / lo)
-
     # The pipeline calls run(); band_select reads the global window directly and
     # manages its own cadence, so it overrides run() rather than process().
     def run(self, state: ProcessingState, now: float, has_new_data: bool) -> dict:
@@ -89,32 +87,31 @@ class BandSelectProcessor(EEGProcessor):
         if self._sos is None:
             return {}
 
-        win = self.latest(state, self._span_seconds())  # latest span of the window
+        # Band-pass the whole global window from scratch (stateless). The recent
+        # samples we emit are far from the start-up transient and thus settled,
+        # so their filtered values are independent of how often we run.
+        win = self.latest(state)
         if win.shape[0] < 16 or win.shape[1] == 0:
             return {}
-        # Band-pass the window from scratch (stateless) — a pure function of the
-        # window, so the result does not depend on the execution frequency.
         filtered = sp_signal.sosfilt(self._sos, win.astype(np.float64), axis=0)
+        rms = np.sqrt(np.mean(filtered**2, axis=0)).astype(float).tolist()
 
-        if self.run_mode == "per-sample":
-            # Emit the filtered value for each sample the window gained this tick.
-            m = min(state.last_appended, filtered.shape[0])
-            if m == 0:
-                return {}
-            return {
-                "band_samples": filtered[-m:, :].astype(float).tolist(),
-                "latest": filtered[-1, :].astype(float).tolist(),
-            }
-
-        # Windowed amplitude (RMS of the band-filtered window), per cadence.
+        # How many of the most-recent filtered samples to emit this tick.
         if self.run_mode == "frequency":
-            due = (now - self._last_run_t) >= (1.0 / max(self.run_hz, 0.01))
-        else:  # realtime
-            due = has_new_data
-        if due:
+            self._pending += state.last_appended
+            if (now - self._last_run_t) < (1.0 / max(self.run_hz, 0.01)):
+                return {"latest": rms}  # not due yet; keep accumulating
             self._last_run_t = now
-            self._latest = np.sqrt(np.mean(filtered**2, axis=0)).astype(float).tolist()
-        return {"latest": self._latest} if self._latest is not None else {}
+            m = self._pending
+            self._pending = 0
+        else:  # realtime / per-sample -> emit this tick's new samples
+            m = state.last_appended
+
+        m = min(m, filtered.shape[0])
+        out: dict = {"latest": rms}
+        if m > 0:
+            out["band_samples"] = filtered[-m:, :].astype(float).tolist()
+        return out
 
     def process(self, state: ProcessingState) -> dict:  # unused; run() is the entry
         return self.run(state, self._last_run_t, True)
