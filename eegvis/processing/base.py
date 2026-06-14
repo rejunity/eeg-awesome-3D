@@ -55,7 +55,7 @@ class EEGProcessor:
 
     def set_run(self, mode: str | None = None, hz: float | None = None) -> None:
         """Set the recompute cadence at runtime."""
-        if mode in ("realtime", "frequency"):
+        if mode in ("realtime", "frequency", "per-sample"):
             self.run_mode = mode
         if hz:
             self.run_hz = float(hz)
@@ -64,7 +64,7 @@ class EEGProcessor:
         """Run :meth:`process` if due (per run_mode), else reuse the last output."""
         if self.run_mode == "frequency":
             due = (now - self._last_run_t) >= (1.0 / max(self.run_hz, 0.01))
-        else:  # realtime
+        else:  # realtime / per-sample -> run whenever new samples arrived
             due = has_new_data
         if due:
             self._last_run_t = now

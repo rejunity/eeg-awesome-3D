@@ -67,7 +67,7 @@ export function installGUI(app: App): GUI {
     .onChange((b: string) => app.setBand(b));
 
   gui
-    .add(state, "bandRunMode", ["realtime", "frequency"])
+    .add(state, "bandRunMode", ["realtime", "frequency", "per-sample"])
     .name("Filter rate")
     .onChange((m: string) => app.setBandRun(m, state.bandRunHz));
   gui

@@ -167,6 +167,7 @@ class Pipeline:
             raw_latest = []
 
         latest = outputs.get("latest", raw_latest)
+        band_samples = outputs.get("band_samples", [])
         normalized = outputs.get("normalized", [])
         bands = outputs.get("bands", {})
         short_fourier = outputs.get("short_fourier")
@@ -191,6 +192,7 @@ class Pipeline:
             channels=channels,
             raw=raw_latest,
             samples=raw_samples,
+            band_samples=band_samples,
             latest=latest,
             normalized=normalized,
             bands=bands,
