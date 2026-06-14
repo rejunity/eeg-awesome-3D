@@ -19,6 +19,8 @@ export function installGUI(app: App): GUI {
     preset: PRESETS[0].name,
     display: "none",
     band: app.bandDefault,
+    bandRunMode: app.bandRunDefaults.mode,
+    bandRunHz: app.bandRunDefaults.hz,
     colorScheme: "red-green",
     colorSD: app.colorSDDefault,
     headCutaway: BrainHead.defaults.cutaway,
@@ -63,6 +65,15 @@ export function installGUI(app: App): GUI {
     .name("Band processor")
     .listen()
     .onChange((b: string) => app.setBand(b));
+
+  gui
+    .add(state, "bandRunMode", ["realtime", "frequency"])
+    .name("Filter rate")
+    .onChange((m: string) => app.setBandRun(m, state.bandRunHz));
+  gui
+    .add(state, "bandRunHz", 1, 60, 1)
+    .name("Filter Hz (freq)")
+    .onChange((hz: number) => app.setBandRun(state.bandRunMode, hz));
 
   gui
     .add(state, "headCutaway", 0, 1, 0.01)

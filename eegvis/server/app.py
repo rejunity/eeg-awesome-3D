@@ -182,6 +182,8 @@ def _handle_client_message(engine: Engine, text: str) -> None:
     if data.get("type") == "set_band":
         band = data.get("band")
         engine.set_band(band if band in (None, "delta", "theta", "alpha", "beta", "gamma") else None)
+    elif data.get("type") == "set_band_run":
+        engine.set_band_run(data.get("mode"), data.get("hz"))
 
 
 async def _status_broadcaster(engine: Engine, interval: float = 2.0) -> None:

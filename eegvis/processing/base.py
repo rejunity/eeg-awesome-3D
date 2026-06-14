@@ -36,12 +36,42 @@ class EEGProcessor:
     def __init__(self, enabled: bool = True, **options: Any):
         self.enabled = enabled
         self.options = options
+        # How often this processor recomputes:
+        #   "realtime"  -> every tick that has new samples
+        #   "frequency" -> at most run_hz times per second
+        # The pipeline reuses the last output on ticks where it doesn't run.
+        self.run_mode: str = options.get("run_mode", "realtime")
+        self.run_hz: float = float(options.get("run_hz", 30.0))
+        self._last_run_t: float = -1e9
+        self._cached: dict[str, Any] = {}
 
     def configure(self, metadata: StreamMetadata) -> None:
         """Called once the stream metadata is known (channel count, srate)."""
 
     def reset(self) -> None:
         """Drop any internal/filter state (e.g. on reconnect)."""
+        self._cached = {}
+        self._last_run_t = -1e9
+
+    def set_run(self, mode: str | None = None, hz: float | None = None) -> None:
+        """Set the recompute cadence at runtime."""
+        if mode in ("realtime", "frequency"):
+            self.run_mode = mode
+        if hz:
+            self.run_hz = float(hz)
+
+    def run(self, state: ProcessingState, now: float, has_new_data: bool) -> dict[str, Any]:
+        """Run :meth:`process` if due (per run_mode), else reuse the last output."""
+        if self.run_mode == "frequency":
+            due = (now - self._last_run_t) >= (1.0 / max(self.run_hz, 0.01))
+        else:  # realtime
+            due = has_new_data
+        if due:
+            self._last_run_t = now
+            out = self.process(state)
+            if out:  # keep the last good output for throttled/empty ticks
+                self._cached = out
+        return self._cached
 
     def process(self, state: ProcessingState) -> dict[str, Any]:
         """Return a dict of output keys for this frame. Override in subclasses."""

@@ -43,6 +43,8 @@ class Pipeline:
         self._window_samples = 0
         self._samples_received = 0
         self._dropped_chunks = 0
+        # Raw EEG samples ingested since the last emit (sent on the next frame).
+        self._pending_raw: list = []
         # Last FFT block, reused on frames where the throttled FFT processor
         # produced nothing.
         self._last_fft: dict | None = None
@@ -68,6 +70,7 @@ class Pipeline:
             frame_index=0,
             eeg_channel_indices=metadata.eeg_channel_indices(),
         )
+        self._pending_raw = []
         for p in self.processors:
             p.configure(metadata)
             p.reset()
@@ -98,44 +101,56 @@ class Pipeline:
             ts[-n:] = chunk.timestamps
         state.valid_samples = min(state.valid_samples + n, self._window_samples)
 
-    def process(self, chunk: EEGChunk) -> EEGFramePayload | None:
-        """Run a chunk through the pipeline and assemble a frame payload."""
+    def ingest(self, chunk: EEGChunk) -> None:
+        """Append a chunk's samples to the sliding window (no frame emitted)."""
         if self._state is None or self._metadata is None:
             self.configure(chunk.metadata)
-        assert self._state is not None and self._metadata is not None
-
+        assert self._state is not None
         self._append(chunk)
+        # Stash this chunk's raw EEG samples for the next emit (chunk.data is
+        # untouched by processors) so the browser gets full source resolution.
+        if chunk.data.shape[0] and self._state.eeg_channel_indices:
+            self._pending_raw.extend(
+                chunk.data[:, self._state.eeg_channel_indices].astype(float).tolist()
+            )
 
+    def mark_no_data(self) -> None:
+        """Signal a tick with no new samples (so streaming processors idle)."""
+        if self._state is not None:
+            self._state.last_appended = 0
+
+    def emit(self, now: float) -> EEGFramePayload | None:
+        """Run due processors on the current window and assemble a frame.
+
+        Called every engine tick (at output_hz), independent of when chunks
+        arrive — each processor recomputes per its own run cadence, and outputs
+        are reused between runs, so the broadcast stream is steady.
+        """
         state = self._state
+        if state is None:
+            return None
         state.frame_index += 1
-        # Expose pipeline-level context to throttled processors.
         setattr(state, "_output_hz", self.config.output_hz)
+        has_new = state.last_appended > 0
 
         outputs: dict = {}
         setattr(state, "_frame_outputs", outputs)
-        # Processors read the sliding window via state (not the chunk directly).
         for proc in self.processors:
-            if not proc.enabled:
-                continue
-            result = proc.process(state)
-            if result:
-                outputs.update(result)
+            if proc.enabled:
+                outputs.update(proc.run(state, now, has_new))
+        # Band processor runs last so its `latest` reflects the selected band.
+        outputs.update(self.band_select.run(state, now, has_new))
 
-        # Band processor runs last so its `latest` reflects the selected band
-        # (or raw pass-through) regardless of any configured processors.
-        band_out = self.band_select.process(state)
-        if band_out:
-            outputs.update(band_out)
-
-        # Raw EEG samples in this chunk (chunk.data is untouched by processors,
-        # which only mutate the rolling buffer) — sent so the browser can draw
-        # the full source resolution on the trace.
-        if chunk.data.shape[0] and state.eeg_channel_indices:
-            raw_samples = chunk.data[:, state.eeg_channel_indices].astype(float).tolist()
-        else:
-            raw_samples = []
-
+        raw_samples = self._pending_raw
+        self._pending_raw = []
         return self._assemble(state, outputs, raw_samples)
+
+    def process(self, chunk: EEGChunk) -> EEGFramePayload | None:
+        """Convenience for tests: ingest one chunk and emit a frame."""
+        import time
+
+        self.ingest(chunk)
+        return self.emit(time.monotonic())
 
     def _assemble(
         self, state: ProcessingState, outputs: dict, raw_samples: list

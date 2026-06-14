@@ -128,7 +128,14 @@ class Engine:
             chunk = self._collect_chunk()
             if chunk is not None and chunk.data.shape[0] > 0:
                 self._ensure_configured(chunk.metadata)
-                frame = self.pipeline.process(chunk)
+                self.pipeline.ingest(chunk)
+            else:
+                self.pipeline.mark_no_data()
+            # Emit a frame every tick (at output_hz) once we have a stream, so
+            # the broadcast is steady regardless of when chunks arrive. Each
+            # processor recomputes per its own cadence.
+            if self._configured_for is not None:
+                frame = self.pipeline.emit(tick_start)
                 if frame is not None:
                     self.latest_frame = frame
                     await self.manager.broadcast_json(frame.model_dump())
@@ -210,3 +217,7 @@ class Engine:
     def set_band(self, band: str | None) -> None:
         """Select the band applied to raw data (None = raw pass-through)."""
         self.pipeline.set_band(band)
+
+    def set_band_run(self, mode: str | None, hz: float | None) -> None:
+        """Set the band processor's recompute cadence (realtime | frequency)."""
+        self.pipeline.band_select.set_run(mode, hz)

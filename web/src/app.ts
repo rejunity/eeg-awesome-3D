@@ -78,6 +78,10 @@ export class App {
   // Band processor applied on the backend to raw data ("none" = pass-through).
   readonly bandDefault = "none";
   private band = this.bandDefault;
+  // How often the band filter recomputes on the backend.
+  readonly bandRunDefaults = { mode: "realtime", hz: 30 };
+  private bandRunMode = this.bandRunDefaults.mode;
+  private bandRunHz = this.bandRunDefaults.hz;
 
   // Resampler: plays the fixed-rate sample stream back on the render clock.
   private resampler = new Resampler();
@@ -158,13 +162,20 @@ export class App {
     this.socket.onStatus = (s) => this.handleStatus(s);
     this.socket.onFrame = (f) => this.enqueueFrame(f);
     this.socket.onClose = () => this.setStatusText("disconnected — reconnecting…", false);
-    // Sync the band selection to the backend on (re)connect.
-    this.socket.onOpen = () => this._sendBand();
+    // Sync the band selection + run cadence to the backend on (re)connect.
+    this.socket.onOpen = () => {
+      this._sendBand();
+      this._sendBandRun();
+    };
     this.socket.connect();
   }
 
   private _sendBand(): void {
     this.socket.send({ type: "set_band", band: this.band === "none" ? null : this.band });
+  }
+
+  private _sendBandRun(): void {
+    this.socket.send({ type: "set_band_run", mode: this.bandRunMode, hz: this.bandRunHz });
   }
 
   /** Select the backend band processor applied to raw data ("none" = off). */
@@ -173,6 +184,13 @@ export class App {
     this.stats = new RunningStats(); // re-baseline; the signal changed
     this._sendBand();
     if (this.guiState) this.guiState.band = band;
+  }
+
+  /** Set the backend band filter's recompute cadence. */
+  setBandRun(mode: string, hz: number): void {
+    this.bandRunMode = mode;
+    this.bandRunHz = hz;
+    this._sendBandRun();
   }
 
   private handleStatus(s: StatusPayload): void {
