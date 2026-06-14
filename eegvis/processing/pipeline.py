@@ -26,6 +26,10 @@ from ..models import (
 from .band_select import BandSelectProcessor
 from .registry import create_processor
 
+# Output keys that are a per-sample stream rather than a current value: they are
+# emitted only on the tick a processor actually runs, never reused between runs.
+STREAMING_KEYS = ("band_samples",)
+
 
 class Pipeline:
     def __init__(self, config: ProcessingConfig):
@@ -38,6 +42,15 @@ class Pipeline:
         # buffer (before the browser normalises/colours). Defaults to None
         # (raw pass-through).
         self.band_select = BandSelectProcessor()
+        # Global run cadence — applies to ALL processors, not per-processor:
+        #   "realtime" / "per-sample" -> run every tick that has new samples
+        #   "frequency"               -> run at most run_hz times per second
+        # Between runs the last (non-streaming) outputs are reused so frames
+        # stay populated at the broadcast rate.
+        self.run_mode: str = "realtime"
+        self.run_hz: float = 30.0
+        self._last_run_t: float = -1e9
+        self._persistent: dict = {}
         self._metadata: StreamMetadata | None = None
         self._state: ProcessingState | None = None
         self._window_samples = 0
@@ -52,6 +65,13 @@ class Pipeline:
     def set_band(self, band: str | None) -> None:
         """Select the band applied to raw data (None = raw pass-through)."""
         self.band_select.set_band(band)
+
+    def set_run(self, mode: str | None = None, hz: float | None = None) -> None:
+        """Set the global processor run cadence at runtime (all processors)."""
+        if mode in ("realtime", "frequency", "per-sample"):
+            self.run_mode = mode
+        if hz:
+            self.run_hz = float(hz)
 
     @property
     def enabled_processors(self):
@@ -71,6 +91,8 @@ class Pipeline:
             eeg_channel_indices=metadata.eeg_channel_indices(),
         )
         self._pending_raw = []
+        self._persistent = {}
+        self._last_run_t = -1e9
         for p in self.processors:
             p.configure(metadata)
             p.reset()
@@ -120,26 +142,44 @@ class Pipeline:
             self._state.last_appended = 0
 
     def emit(self, now: float) -> EEGFramePayload | None:
-        """Run due processors on the current window and assemble a frame.
+        """Assemble a frame, running the processors if the global cadence is due.
 
         Called every engine tick (at output_hz), independent of when chunks
-        arrive — each processor recomputes per its own run cadence, and outputs
-        are reused between runs, so the broadcast stream is steady.
+        arrive. The run cadence is global (see :attr:`run_mode`): on ticks where
+        the processors don't run, the last non-streaming outputs are reused so
+        the broadcast stream stays steady; per-sample stream outputs
+        (``band_samples``) are emitted only on the ticks a run happens.
         """
         state = self._state
         if state is None:
             return None
         state.frame_index += 1
         setattr(state, "_output_hz", self.config.output_hz)
-        has_new = state.last_appended > 0
 
-        outputs: dict = {}
-        setattr(state, "_frame_outputs", outputs)
-        for proc in self.processors:
-            if proc.enabled:
-                outputs.update(proc.run(state, now, has_new))
-        # Band processor runs last so its `latest` reflects the selected band.
-        outputs.update(self.band_select.run(state, now, has_new))
+        state.samples_since_run += state.last_appended
+        if self.run_mode == "frequency":
+            due = (now - self._last_run_t) >= (1.0 / max(self.run_hz, 0.01))
+        else:  # realtime / per-sample -> run whenever new samples arrived
+            due = state.last_appended > 0
+
+        outputs = dict(self._persistent)  # reuse last current-values by default
+        for k in STREAMING_KEYS:
+            outputs.pop(k, None)
+        if due:
+            self._last_run_t = now
+            fresh: dict = {}
+            setattr(state, "_frame_outputs", fresh)  # processors see prior outputs
+            for proc in self.processors:
+                if proc.enabled:
+                    fresh.update(proc.process(state))
+            # Band processor runs last so its `latest` reflects the selected band.
+            fresh.update(self.band_select.process(state))
+            state.samples_since_run = 0
+            # Persist current-value outputs; stream outputs pass through once.
+            for key, value in fresh.items():
+                if key not in STREAMING_KEYS:
+                    self._persistent[key] = value
+            outputs.update(fresh)
 
         raw_samples = self._pending_raw
         self._pending_raw = []

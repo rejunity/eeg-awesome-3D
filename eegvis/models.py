@@ -76,6 +76,10 @@ class ProcessingState:
     # Samples appended in the most recent tick (for streaming processors that
     # must process each new sample exactly once, e.g. stateful filters).
     last_appended: int = 0
+    # Samples appended since the processors last ran (>= last_appended when the
+    # global run cadence throttles below the tick rate). A streaming processor
+    # emits this many of its most-recent values per run.
+    samples_since_run: int = 0
     # Indices (into channel_names) that are EEG channels and should drive visuals.
     eeg_channel_indices: list[int] = field(default_factory=list)
 

@@ -219,5 +219,5 @@ class Engine:
         self.pipeline.set_band(band)
 
     def set_band_run(self, mode: str | None, hz: float | None) -> None:
-        """Set the band processor's recompute cadence (realtime | frequency)."""
-        self.pipeline.band_select.set_run(mode, hz)
+        """Set the global processor run cadence (realtime | frequency | per-sample)."""
+        self.pipeline.set_run(mode, hz)

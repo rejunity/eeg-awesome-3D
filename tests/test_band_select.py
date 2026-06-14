@@ -73,7 +73,7 @@ def _band_stream(run_mode, run_hz, md, seconds=8.0, chunk_dt=0.05, freqs=(6.0, 1
     )
     pipe.configure(md)
     pipe.set_band("alpha")
-    pipe.band_select.set_run(run_mode, run_hz)
+    pipe.set_run(run_mode, run_hz)
 
     sr = md.nominal_srate
     n_per = int(chunk_dt * sr)
