@@ -28,11 +28,31 @@ processing:
   output_hz: 30
   # Sliding window of recent samples that processors read from (seconds).
   rolling_window_seconds: 10.0
-  # No processing/filtering between the stream and the visualisation: raw
-  # per-channel `latest` values are sent through, and the browser maps colour
-  # from a per-channel running mean/standard deviation. (Processor classes still
-  # exist and can be re-enabled here.)
-  processors: []
+  # Global processor run cadence (applies to ALL processors):
+  #   realtime | per-sample -> run every tick that has new samples
+  #   frequency             -> run at most run_hz times per second (cheaper)
+  run_mode: realtime
+  run_hz: 30
+  # Feature extractors are pure functions of the rolling window and populate the
+  # band / FFT / features display panes. The raw trace and electrode colouring
+  # are unaffected (they use the raw pass-through `samples`/`latest`).
+  #
+  # Preprocessing filters (transform the buffer in place; enable BEFORE the
+  # extractors so they see cleaned data) are available but off by default:
+  #   - {name: bandpass, low_hz: 1.0, high_hz: 45.0, order: 4}
+  #   - {name: notch, hz: 50.0, quality: 30.0}
+  #   - {name: car}            # common average reference
+  processors:
+    - {name: band_power}        # absolute bands + relative power + ratios
+    - {name: band_envelope}     # Hilbert amplitude per band
+    - {name: hjorth}            # activity / mobility / complexity
+    - {name: line_length}
+    - {name: spectral_entropy}
+    - {name: aperiodic}         # 1/f slope + offset
+    - {name: fft}               # 128-bin high-resolution spectrum
+    # - {name: short_fourier}   # Unity visual-parity oscillators
+    # - {name: normalization}   # moving min/max or z-score `normalized`
+    # - {name: smoothing, alpha: 0.25}
 
 synthetic:
   channel_count: 37        # match a CGX Quick32r stream

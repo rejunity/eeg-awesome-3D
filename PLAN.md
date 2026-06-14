@@ -522,6 +522,54 @@ Processor rules:
    - Recreate the Unity short Fourier visual feel: three main bands/oscillators around 10 Hz, 20 Hz, and 40 Hz, mapped to colour channels or display bands.
    - It does not need to be scientifically perfect; it is a visual parity processor.
 
+### EEG filters and feature extractors (curated reference)
+
+A survey of the filters and features that dominate EEG literature, scoped to what
+is useful and feasible in a real-time visualiser. Each processor is a pure
+function of the global rolling window (feature extractors) or a streaming
+transform of it (preprocessing filters). Implemented ones are marked ✓.
+
+Preprocessing filters (clean the signal before feature extraction):
+
+- ✓ **Band-pass** (IIR Butterworth, SOS) — universal first step, ~0.5–45 Hz.
+- ✓ **Notch / band-stop** at 50/60 Hz (+ harmonics) — mains line noise.
+- ✓ **Common Average Reference (CAR)** — subtract the cross-channel mean per
+  sample; cheap spatial filter, very common, real-time friendly.
+- Surface Laplacian / CSD, ICA, ASR — stronger artifact/spatial methods; offline
+  or heavier, deferred.
+
+Feature extractors:
+
+- Time domain (cheap, per channel)
+  - ✓ **Hjorth parameters** — activity (variance), mobility, complexity.
+  - ✓ **Line length** — sum of |Δx|; popular for seizure/burst detection.
+  - ✓ RMS / variance / skewness / kurtosis (covered by Hjorth + stats).
+- Frequency domain
+  - ✓ **Band power** delta/theta/alpha/beta/gamma — absolute and **relative**.
+  - ✓ **Band-power ratios** — theta/beta (attention), and the engagement index
+    β/(α+θ).
+  - ✓ **Spectral entropy** — flatness/complexity of the spectrum.
+  - ✓ **Aperiodic 1/f slope + offset** — log-log fit of the PSD (FOOOF-style),
+    separating background from oscillatory power.
+  - ✓ **High-resolution spectrum** — full EEG spectrum in ~128 bins (the FFT
+    processor), per channel, for a spectrogram-style heatmap.
+- Time-frequency
+  - ✓ **Hilbert band envelope** — analytic-signal amplitude per band; the
+    principled smooth band amplitude (vs. the raw oscillation).
+  - ✓ Short-time Fourier (visual parity oscillators) — `short_fourier`.
+  - Wavelet (Morlet CWT / DWT) — richer time-frequency, deferred.
+- Connectivity (multi-channel; needs a matrix view — documented, deferred)
+  - Magnitude-squared coherence, Phase Locking Value (PLV), (weighted) Phase Lag
+    Index, Granger causality.
+- Complexity / nonlinear (deferred)
+  - Sample/permutation entropy, Higuchi/Katz fractal dimension, Lempel-Ziv, DFA.
+
+Frame transport: per-channel scalar features are carried in a generic
+`features: dict[str, list[float]]` map (one entry per feature, indexed by
+channel), so adding a feature never changes the payload contract — the browser
+renders the map as a feature×channel heatmap pane. Band power stays in `bands`
+and the high-resolution spectrum stays in `fft`.
+
 ### Server design
 
 Implement `eegvis/server/app.py`:
@@ -623,16 +671,25 @@ Requirements:
 
 Create `web/src/scene/bandTexture.ts`.
 
-Visual modes:
+Visual modes (electrode-by-X heatmaps in the top HUD panel; toggled by the GUI
+"Display" dropdown and keyboard):
 
-1. Electrode-by-band matrix: electrodes on one axis, bands/frequencies on the other.
-2. Texture wrapped/mapped to electrode indicators similar to Unity render texture workflow.
-3. Simplified panel for MVP if texture mapping is too much.
+1. `bands` — electrode × 5 bands (delta…gamma) matrix, from `bands`.
+2. `fft` — electrode × 128-bin high-resolution spectrum, from `fft` (with a Hz
+   axis). Keyboard `C`.
+3. `features` — electrode × generic feature matrix from the `features` map
+   (Hjorth, line length, spectral entropy, 1/f slope, band ratios, envelopes…),
+   each column min/max-normalised across channels. Keyboard `V`.
+
+Plus the time-series strips: `trace` (processed/band, `Z`) and `rawtrace`
+(raw, `X`).
 
 Required data source:
 
 - Use `bands` for stable band-power display.
-- Use `fft` only when available and not too large.
+- Use `fft` for the spectrum; the processor delivers a fixed 128 bins.
+- Use `features` for scalar per-channel features (extensible — any new key
+  appears as a new column automatically).
 
 ### Controls and presets
 

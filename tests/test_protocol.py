@@ -2,11 +2,16 @@ from eegvis.config import load_config
 from eegvis.models import EEGFramePayload, StatusPayload, StreamInfoPayload
 
 
-def test_default_config_is_passthrough():
-    # Default flow has no processing/filtering between stream and visualisation.
+def test_default_config_populates_feature_panes_without_altering_raw():
+    # The default enables feature extractors (so the band/FFT/features panes have
+    # data) but no signal-altering processor — the raw trace and electrode
+    # colouring stay pass-through (they use raw `samples`/`latest`).
     cfg = load_config()
     assert cfg.server.port == 8765
-    assert cfg.processing.processors == []
+    names = [p.name for p in cfg.processing.processors]
+    assert "fft" in names and "band_power" in names
+    altering = {"bandpass", "notch", "car", "normalization", "smoothing"}
+    assert altering.isdisjoint(names)
 
 
 def test_processor_options_preserved_when_configured():

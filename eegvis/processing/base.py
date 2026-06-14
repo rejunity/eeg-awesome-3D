@@ -92,5 +92,17 @@ class EEGProcessor:
         n = min(n, eeg.shape[0])
         return eeg[-n:] if n > 0 else eeg[:0]
 
+    def new_since_run(self, state: ProcessingState) -> np.ndarray:
+        """EEG samples appended since the processors last ran, shape (n, n_eeg).
+
+        Like :meth:`new_samples` but spans the whole batch a streaming processor
+        must consume when the global run cadence is throttled below the tick
+        rate (so no sample is filtered twice or skipped).
+        """
+        n = min(state.samples_since_run, state.valid_samples)
+        eeg = self._eeg_view(state)
+        n = min(n, eeg.shape[0])
+        return eeg[-n:] if n > 0 else eeg[:0]
+
     def opt(self, key: str, default: Any = None) -> Any:
         return self.options.get(key, default)

@@ -29,6 +29,22 @@ from .registry import create_processor
 # Output keys that are a per-sample stream rather than a current value: they are
 # emitted only on the tick a processor actually runs, never reused between runs.
 STREAMING_KEYS = ("band_samples",)
+# Dict-valued outputs that several processors contribute to: merge rather than
+# overwrite so each processor adds its own keys (e.g. per-channel features).
+MERGE_KEYS = ("features",)
+
+
+def _merge_outputs(dst: dict, out: dict) -> None:
+    """Fold a processor's output into the accumulated frame outputs.
+
+    MERGE_KEYS (e.g. ``features``) are dict-merged so multiple processors can
+    each contribute entries; everything else overwrites.
+    """
+    for key, value in out.items():
+        if key in MERGE_KEYS and isinstance(value, dict):
+            dst.setdefault(key, {}).update(value)
+        else:
+            dst[key] = value
 
 
 class Pipeline:
@@ -47,8 +63,8 @@ class Pipeline:
         #   "frequency"               -> run at most run_hz times per second
         # Between runs the last (non-streaming) outputs are reused so frames
         # stay populated at the broadcast rate.
-        self.run_mode: str = "realtime"
-        self.run_hz: float = 30.0
+        self.run_mode: str = getattr(config, "run_mode", "realtime")
+        self.run_hz: float = float(getattr(config, "run_hz", 30.0))
         self._last_run_t: float = -1e9
         self._persistent: dict = {}
         self._metadata: StreamMetadata | None = None
@@ -171,9 +187,9 @@ class Pipeline:
             setattr(state, "_frame_outputs", fresh)  # processors see prior outputs
             for proc in self.processors:
                 if proc.enabled:
-                    fresh.update(proc.process(state))
+                    _merge_outputs(fresh, proc.process(state))
             # Band processor runs last so its `latest` reflects the selected band.
-            fresh.update(self.band_select.process(state))
+            _merge_outputs(fresh, self.band_select.process(state))
             state.samples_since_run = 0
             # Persist current-value outputs; stream outputs pass through once.
             for key, value in fresh.items():
@@ -210,6 +226,7 @@ class Pipeline:
         band_samples = outputs.get("band_samples", [])
         normalized = outputs.get("normalized", [])
         bands = outputs.get("bands", {})
+        features = outputs.get("features", {})
         short_fourier = outputs.get("short_fourier")
 
         fft_block = outputs.get("fft")
@@ -236,6 +253,7 @@ class Pipeline:
             latest=latest,
             normalized=normalized,
             bands=bands,
+            features=features,
             fft=fft_payload,
             short_fourier=short_fourier,
             quality=QualityPayload(

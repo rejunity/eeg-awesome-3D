@@ -1,10 +1,13 @@
-"""FFT processor.
+"""FFT processor — high-resolution spectrum.
 
 Computes a Hann-windowed rfft over the most recent ``window_seconds`` of the
-rolling buffer for each EEG channel. Emits compact frequency bins (capped at
-``max_freq_hz``) and per-channel magnitudes. Throttled to ``update_hz`` so the
-payload stays small; between updates the previous result is reused by the
-pipeline.
+rolling buffer for each EEG channel, then re-bins the magnitude spectrum into a
+fixed number of bins (``n_bins``, default 128) spanning ``min_freq_hz`` ..
+``max_freq_hz`` so the browser always receives a consistent, high-resolution
+spectrum (spectrogram-style heatmap) regardless of sample rate or window length.
+
+Throttled to ``update_hz`` so the payload stays small; between updates the
+pipeline reuses the previous result.
 """
 
 from __future__ import annotations
@@ -23,10 +26,12 @@ class FFTProcessor(EEGProcessor):
 
     def __init__(self, enabled: bool = True, **options: Any):
         super().__init__(enabled, **options)
-        self.window_seconds = float(self.opt("window_seconds", 1.0))
-        self.update_hz = float(self.opt("update_hz", 10.0))
-        self.max_freq_hz = float(self.opt("max_freq_hz", 45.0))
-        self.max_channels = int(self.opt("max_channels", 32))
+        self.window_seconds = float(self.opt("window_seconds", 2.0))
+        self.update_hz = float(self.opt("update_hz", 15.0))
+        self.n_bins = int(self.opt("n_bins", 128))
+        self.min_freq_hz = float(self.opt("min_freq_hz", 0.0))
+        self.max_freq_hz = float(self.opt("max_freq_hz", 64.0))
+        self.max_channels = int(self.opt("max_channels", 64))
         self._sample_rate = 0.0
         self._last_emit_frame = -10_000
         self._window: np.ndarray | None = None
@@ -47,7 +52,6 @@ class FFTProcessor(EEGProcessor):
             return {}
 
         # Throttle: only recompute every Nth output frame (output_hz / update_hz).
-        # Between emits the pipeline reuses the previous fft block.
         if state.frame_index - self._last_emit_frame < self._emit_interval(state):
             return {}
         self._last_emit_frame = state.frame_index
@@ -58,24 +62,32 @@ class FFTProcessor(EEGProcessor):
             return {}
 
         window = self._ensure_window(win_n)[:, None]
-        windowed = segment * window
-
-        spectrum = np.fft.rfft(windowed, axis=0)
-        mags = np.abs(spectrum) / win_n  # (bins, n_eeg)
+        spectrum = np.fft.rfft(segment * window, axis=0)
+        mags = np.abs(spectrum) / win_n  # (n_freqs, n_eeg)
         freqs = np.fft.rfftfreq(win_n, d=1.0 / sr)
 
-        keep = freqs <= self.max_freq_hz
-        freqs = freqs[keep]
-        mags = mags[keep, :]
+        # Re-bin into n_bins linearly-spaced bins spanning [min, max] (clamped to
+        # Nyquist), averaging the FFT magnitudes that fall in each target bin.
+        fmax = min(self.max_freq_hz, sr / 2.0)
+        fmin = max(self.min_freq_hz, 0.0)
+        edges = np.linspace(fmin, fmax, self.n_bins + 1)
+        centers = 0.5 * (edges[:-1] + edges[1:])
 
-        # values[channel][bin]
-        n_ch = min(mags.shape[1], self.max_channels)
-        values = mags[:, :n_ch].T.astype(float).tolist()
+        in_range = (freqs >= fmin) & (freqs <= fmax)
+        bin_idx = np.clip(np.digitize(freqs[in_range], edges) - 1, 0, self.n_bins - 1)
+        sel = mags[in_range, :]
+        n_ch = min(sel.shape[1], self.max_channels)
+        sel = sel[:, :n_ch]
+
+        sums = np.zeros((self.n_bins, n_ch))
+        np.add.at(sums, bin_idx, sel)
+        counts = np.maximum(np.bincount(bin_idx, minlength=self.n_bins), 1)
+        binned = sums / counts[:, None]  # (n_bins, n_ch)
 
         return {
             "fft": {
-                "freqs": freqs.astype(float).tolist(),
-                "values": values,
+                "freqs": centers.astype(float).tolist(),
+                "values": binned.T.astype(float).tolist(),  # values[channel][bin]
             }
         }
 

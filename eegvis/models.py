@@ -145,6 +145,10 @@ class EEGFramePayload(BaseModel):
     latest: list[float]
     normalized: list[float]
     bands: dict[str, list[float]] = Field(default_factory=dict)
+    # Generic per-channel scalar features keyed by name (Hjorth parameters, line
+    # length, spectral entropy, 1/f slope, band-power ratios, band envelopes, …).
+    # features[name][channel] -> value. Extensible without changing the contract.
+    features: dict[str, list[float]] = Field(default_factory=dict)
     fft: FFTPayload | None = None
     # Short-Fourier visual parity output: per-channel energy for the 3 oscillators.
     short_fourier: dict[str, list[float]] | None = None

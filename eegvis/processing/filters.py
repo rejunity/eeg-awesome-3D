@@ -1,12 +1,16 @@
-"""Bandpass and notch filters with preserved realtime state.
+"""Preprocessing filters: band-pass, notch and common-average reference.
 
-Both use SciPy second-order sections (SOS) and ``sosfilt`` with retained
-``zi`` state, so each incoming chunk continues the filter rather than
-recomputing from scratch. State is kept per (EEG) channel.
+These transform the signal *in place* in the rolling buffer so that feature
+extractors downstream (FFT, band power, Hjorth, …) operate on the cleaned data.
+Place them before the extractors in the ``processors`` config list.
 
-These processors filter the rolling buffer in place via ``state`` so that
-downstream processors (FFT, band power) see filtered data. They declare no
-output keys of their own.
+Band-pass and notch are temporal IIR filters (SciPy second-order sections) that
+keep ``zi`` state across runs, so each new sample is filtered exactly once and
+the result is independent of the global run cadence (a throttled run just
+filters a larger batch). CAR is a per-sample spatial operation (subtract the
+cross-channel mean) and keeps no state.
+
+They declare no output keys of their own.
 """
 
 from __future__ import annotations
@@ -20,22 +24,28 @@ from ..models import ProcessingState, StreamMetadata
 from .base import EEGProcessor
 
 
+def _write_back(state: ProcessingState, y: np.ndarray, idx: list[int]) -> None:
+    """Write filtered samples ``y`` (n, n_eeg) back into the buffer's EEG cols."""
+    n = y.shape[0]
+    if n and n <= state.rolling_data.shape[0]:
+        for col, ch in enumerate(idx):
+            state.rolling_data[-n:, ch] = y[:, col]
+
+
 class _SOSFilterProcessor(EEGProcessor):
-    """Shared SOS realtime filtering against the latest chunk."""
+    """Shared stateful SOS filtering over the samples added since the last run."""
 
     def __init__(self, enabled: bool = True, **options: Any):
         super().__init__(enabled, **options)
         self._sos: np.ndarray | None = None
         self._zi: np.ndarray | None = None  # shape (n_sections, 2, n_channels)
         self._sample_rate = 0.0
-        self._eeg_indices: list[int] = []
 
     def _design(self, sample_rate: float) -> np.ndarray:
         raise NotImplementedError
 
     def configure(self, metadata: StreamMetadata) -> None:
         self._sample_rate = metadata.nominal_srate
-        self._eeg_indices = metadata.eeg_channel_indices()
         if self._sample_rate > 0:
             self._sos = self._design(self._sample_rate)
         self.reset()
@@ -44,31 +54,20 @@ class _SOSFilterProcessor(EEGProcessor):
         self._zi = None
 
     def process(self, state: ProcessingState) -> dict[str, Any]:
-        # Stream the samples appended this tick through the stateful filter.
-        x = self.new_samples(state).astype(np.float64)  # (n_new, n_eeg)
+        x = self.new_since_run(state).astype(np.float64)  # (n, n_eeg)
         if self._sos is None or x.shape[0] == 0:
             return {}
         idx = state.eeg_channel_indices or list(range(state.rolling_data.shape[1]))
         n_ch = x.shape[1]
 
-        # For axis=0 input (samples, channels), sosfilt wants zi shaped
-        # (n_sections, 2, n_channels). sosfilt_zi gives (n_sections, 2).
+        # sosfilt wants zi shaped (n_sections, 2, n_channels). Seed it from the
+        # first sample so the very first output starts settled, not from zero.
         if self._zi is None or self._zi.shape[2] != n_ch:
             zi0 = sp_signal.sosfilt_zi(self._sos)  # (n_sections, 2)
-            self._zi = np.repeat(zi0[:, :, None], n_ch, axis=2)
-            # Scale steady-state zi by the first sample so output starts settled.
-            self._zi = self._zi * x[0, :][None, None, :]
+            self._zi = np.repeat(zi0[:, :, None], n_ch, axis=2) * x[0, :][None, None, :]
 
-        # Filter along time (axis 0) per channel.
         y, self._zi = sp_signal.sosfilt(self._sos, x, axis=0, zi=self._zi)
-
-        # Write filtered samples back into the rolling buffer's EEG columns so
-        # downstream processors operate on filtered data. The most recent
-        # ``samples`` rows of the rolling buffer correspond to this chunk.
-        n = y.shape[0]
-        if n <= state.rolling_data.shape[0]:
-            for col, ch in enumerate(idx):
-                state.rolling_data[-n:, ch] = y[:, col]
+        _write_back(state, y, idx)
         return {}
 
 
@@ -77,12 +76,11 @@ class BandpassProcessor(_SOSFilterProcessor):
     output_keys = ()
 
     def _design(self, sample_rate: float) -> np.ndarray:
-        low = float(self.opt("low_hz", 1.0))
+        low = max(float(self.opt("low_hz", 1.0)), 0.01)
         high = float(self.opt("high_hz", 45.0))
         order = int(self.opt("order", 4))
         nyq = sample_rate / 2.0
         high = min(high, nyq * 0.99)
-        low = max(low, 0.01)
         return sp_signal.butter(
             order, [low / nyq, high / nyq], btype="bandpass", output="sos"
         )
@@ -97,3 +95,19 @@ class NotchProcessor(_SOSFilterProcessor):
         quality = float(self.opt("quality", 30.0))
         b, a = sp_signal.iirnotch(freq, quality, sample_rate)
         return sp_signal.tf2sos(b, a)
+
+
+class CARProcessor(EEGProcessor):
+    """Common Average Reference: subtract the per-sample mean across EEG channels."""
+
+    name = "car"
+    output_keys = ()
+
+    def process(self, state: ProcessingState) -> dict[str, Any]:
+        x = self.new_since_run(state).astype(np.float64)  # (n, n_eeg)
+        if x.shape[0] == 0 or x.shape[1] == 0:
+            return {}
+        idx = state.eeg_channel_indices or list(range(state.rolling_data.shape[1]))
+        y = x - x.mean(axis=1, keepdims=True)
+        _write_back(state, y, idx)
+        return {}

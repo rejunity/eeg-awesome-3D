@@ -61,6 +61,11 @@ class ProcessorConfig(BaseModel):
 class ProcessingConfig(BaseModel):
     output_hz: float = 30.0
     rolling_window_seconds: float = 10.0
+    # Global processor run cadence (applies to all processors):
+    #   "realtime" | "per-sample" -> run every tick that has new samples
+    #   "frequency"               -> run at most run_hz times per second
+    run_mode: str = "realtime"
+    run_hz: float = 30.0
     processors: list[ProcessorConfig] = Field(default_factory=list)
 
 

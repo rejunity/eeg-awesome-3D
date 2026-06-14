@@ -50,8 +50,8 @@ class ShortFourierVisualProcessor(EEGProcessor):
             self._im = np.zeros((nb, n_ch))
 
     def process(self, state: ProcessingState) -> dict[str, Any]:
-        # Stream the samples appended this tick through the leaky oscillators.
-        x = self.new_samples(state).astype(np.float64)  # (n_new, n_eeg)
+        # Stream the samples added since the last run through the leaky oscillators.
+        x = self.new_since_run(state).astype(np.float64)  # (n_new, n_eeg)
         if x.shape[0] == 0:
             return self._emit()
 

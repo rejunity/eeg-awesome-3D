@@ -27,7 +27,7 @@ DEFAULT_BANDS: dict[str, tuple[float, float]] = {
 
 class BandPowerProcessor(EEGProcessor):
     name = "band_power"
-    output_keys = ("bands",)
+    output_keys = ("bands", "features")
 
     def __init__(self, enabled: bool = True, **options: Any):
         super().__init__(enabled, **options)
@@ -55,22 +55,38 @@ class BandPowerProcessor(EEGProcessor):
             return {"bands": {name: [] for name in self.bands}}
 
         n = eeg.shape[0]
+        n_ch = eeg.shape[1]
         window = self._ensure_window(n)[:, None]
         spectrum = np.fft.rfft(eeg * window, axis=0)
         psd = (np.abs(spectrum) ** 2) / n  # (bins, n_eeg)
         freqs = np.fft.rfftfreq(n, d=1.0 / sr)
 
-        out: dict[str, list[float]] = {}
+        # Absolute mean power per band, per channel.
+        power: dict[str, np.ndarray] = {}
         for name, (lo, hi) in self.bands.items():
             mask = (freqs >= lo) & (freqs < hi)
-            if not mask.any():
-                out[name] = [0.0] * eeg.shape[1]
-                continue
-            power = psd[mask, :].mean(axis=0)  # (n_eeg,)
-            # Log-compress then normalize across channels for display stability.
-            comp = np.log1p(power)
-            peak = comp.max()
-            norm = comp / peak if peak > 0 else comp
-            out[name] = norm.astype(float).tolist()
+            power[name] = psd[mask, :].mean(axis=0) if mask.any() else np.zeros(n_ch)
 
-        return {"bands": out}
+        # `bands`: log-compressed and peak-normalised across channels (display).
+        bands_out: dict[str, list[float]] = {}
+        for name, p in power.items():
+            comp = np.log1p(p)
+            peak = comp.max()
+            bands_out[name] = (comp / peak if peak > 0 else comp).astype(float).tolist()
+
+        # `features`: relative band power (fraction of total) + classic ratios.
+        total = np.sum([p for p in power.values()], axis=0)
+        total = np.maximum(total, 1e-12)
+        features: dict[str, list[float]] = {}
+        for name, p in power.items():
+            features[f"rel_{name}"] = (p / total).astype(float).tolist()
+        theta = power.get("theta")
+        beta = power.get("beta")
+        alpha = power.get("alpha")
+        if theta is not None and beta is not None:
+            features["theta_beta"] = (theta / np.maximum(beta, 1e-12)).astype(float).tolist()
+        if theta is not None and beta is not None and alpha is not None:
+            engagement = beta / np.maximum(alpha + theta, 1e-12)
+            features["engagement"] = engagement.astype(float).tolist()
+
+        return {"bands": bands_out, "features": features}

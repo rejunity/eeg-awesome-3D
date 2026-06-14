@@ -45,6 +45,8 @@ export interface EEGFramePayload {
   latest: number[];
   normalized: number[];
   bands: Record<string, number[]>;
+  // Generic per-channel scalar features keyed by name: features[name][channel].
+  features: Record<string, number[]>;
   fft: FFTBlock | null;
   short_fourier: Record<string, number[]> | null;
   quality: QualityInfo;

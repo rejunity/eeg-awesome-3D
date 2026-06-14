@@ -5,8 +5,9 @@ import { PRESETS } from "../scene/presets";
  * Keyboard controls mirroring Unity's Controls.cs:
  *   Space : toggle electrode indicators
  *   Z     : EEG strip display
- *   X     : electrode/band display
- *   C     : FFT display
+ *   X     : raw trace display
+ *   C     : FFT spectrum display
+ *   V     : feature heatmap display
  *   1–7   : visual presets
  *   ↑/↓   : head cutaway / transparency
  */
@@ -31,6 +32,10 @@ export function installKeyboard(app: App): void {
       case "c":
       case "C":
         app.toggleDisplay("fft");
+        break;
+      case "v":
+      case "V":
+        app.toggleDisplay("features"); // feature heatmap (Hjorth, entropy, …)
         break;
       default:
         if (e.key >= "1" && e.key <= "7") {

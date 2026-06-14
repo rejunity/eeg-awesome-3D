@@ -45,7 +45,14 @@ export function installGUI(app: App): GUI {
     });
 
   gui
-    .add(state, "display", ["none", "trace", "rawtrace", "bands", "fft"])
+    .add(state, "display", [
+      "none",
+      "trace",
+      "rawtrace",
+      "bands",
+      "fft",
+      "features",
+    ])
     .name("Display")
     .listen()
     .onChange((mode: string) => app.setDisplay(mode as any));

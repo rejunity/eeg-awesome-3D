@@ -14,7 +14,13 @@ import type {
   StatusPayload,
 } from "./net/protocol";
 
-export type DisplayMode = "none" | "trace" | "rawtrace" | "bands" | "fft";
+export type DisplayMode =
+  | "none"
+  | "trace"
+  | "rawtrace"
+  | "bands"
+  | "fft"
+  | "features";
 
 // Fraction of screen height the 2D panel occupies at the top.
 const PANEL_FRACTION = 0.25;
@@ -288,7 +294,9 @@ export class App {
     }
     if (this.electrodes && elec) this.electrodes.update(this.channels, elec);
     if (
-      (this.displayMode === "bands" || this.displayMode === "fft") &&
+      (this.displayMode === "bands" ||
+        this.displayMode === "fft" ||
+        this.displayMode === "features") &&
       this.latestFrame
     ) {
       this.bands.update(this.latestFrame);
@@ -317,14 +325,14 @@ export class App {
       this.displayOverlay.style.display = "none";
       return;
     }
-    if (mode === "bands" || mode === "fft") {
-      this.bands.setMode(mode === "fft" ? "fft" : "bands");
+    const matrix = mode === "bands" || mode === "fft" || mode === "features";
+    if (matrix) {
+      this.bands.setMode(mode as "bands" | "fft" | "features");
       if (this.latestFrame) this.bands.update(this.latestFrame);
     }
     this.trace.domElement.style.display = mode === "trace" ? "block" : "none";
     this.rawTrace.domElement.style.display = mode === "rawtrace" ? "block" : "none";
-    this.bands.domElement.style.display =
-      mode === "bands" || mode === "fft" ? "block" : "none";
+    this.bands.domElement.style.display = matrix ? "block" : "none";
     this.displayOverlay.style.display = "block";
   }
 
@@ -341,6 +349,9 @@ export class App {
   }
   showFFT(): void {
     this.setDisplay("fft");
+  }
+  showFeatures(): void {
+    this.setDisplay("features");
   }
 
   applyPreset(index: number): void {
