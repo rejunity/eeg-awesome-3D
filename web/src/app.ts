@@ -86,8 +86,10 @@ export class App {
   // Resampler: plays the fixed-rate sample stream back on the render clock.
   private resampler = new Resampler();
   private channels: string[] = [];
-  // Latest per-frame band display (band mode only; band output is per-frame).
-  private bandDisplay: number[] | null = null;
+  // Band mode (per-frame, stepped): the latest target and the render-rate eased
+  // value, so the band trace/electrodes are smooth instead of rectangular.
+  private bandTarget: number[] | null = null;
+  private bandEased: number[] | null = null;
 
   // Set by installGUI so presets can keep GUI widgets in sync.
   guiState: Record<string, unknown> | null = null;
@@ -240,15 +242,16 @@ export class App {
     const clampZ = (stats: RunningStats, ch: string, x: number) =>
       Math.max(-1, Math.min(1, stats.zscore(ch, x) / sd));
 
-    // 1) Ingest newly received frames: raw samples -> resampler buffer.
+    // 1) Ingest newly received frames: raw samples -> resampler buffer. The
+    // band value is per-frame (it only changes when the window gains a burst),
+    // so just record it as a target to ease toward — not pushed directly, which
+    // would make a stepped/rectangular trace.
     for (const f of this.pendingFrames) {
       this.channels = f.channels;
       this.latestFrame = f;
       this.resampler.push(f.samples);
       if (this.band !== "none") {
-        const d = f.latest.map((x, i) => clampZ(this.stats, f.channels[i], x));
-        this.bandDisplay = d;
-        this.trace.push(d, f.channels); // processed trace (per-frame band value)
+        this.bandTarget = f.latest.map((x, i) => clampZ(this.stats, f.channels[i], x));
       }
     }
     this.pendingFrames.length = 0;
@@ -266,8 +269,22 @@ export class App {
       }
     }
 
-    // 3) Electrodes + band panel from the most recent value.
-    const elec = this.band === "none" ? lastRawDisplay : this.bandDisplay;
+    // 3) Band: ease toward the target every render so the stepped per-frame band
+    // value becomes a smooth curve (no rectangular transitions); push once per
+    // render to the processed trace and drive the electrodes from it.
+    let elec = lastRawDisplay;
+    if (this.band !== "none" && this.bandTarget) {
+      const k = 0.15;
+      if (!this.bandEased || this.bandEased.length !== this.bandTarget.length) {
+        this.bandEased = [...this.bandTarget];
+      } else {
+        for (let i = 0; i < this.bandTarget.length; i++) {
+          this.bandEased[i] += (this.bandTarget[i] - this.bandEased[i]) * k;
+        }
+      }
+      this.trace.push(this.bandEased, this.channels);
+      elec = this.bandEased;
+    }
     if (this.electrodes && elec) this.electrodes.update(this.channels, elec);
     if (
       (this.displayMode === "bands" || this.displayMode === "fft") &&
