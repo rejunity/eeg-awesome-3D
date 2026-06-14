@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from ..models import EEGChunk, ProcessingState, StreamMetadata
+from ..models import ProcessingState, StreamMetadata
 from .base import EEGProcessor
 
 DEFAULT_BANDS: dict[str, tuple[float, float]] = {
@@ -48,9 +48,9 @@ class BandPowerProcessor(EEGProcessor):
             self._window_n = n
         return self._window
 
-    def process(self, chunk: EEGChunk, state: ProcessingState) -> dict[str, Any]:
+    def process(self, state: ProcessingState) -> dict[str, Any]:
         sr = state.sample_rate or self._sample_rate
-        eeg = self._eeg_view(state)
+        eeg = self.latest(state)  # whole window
         if sr <= 0 or eeg.shape[0] < 16 or eeg.shape[1] == 0:
             return {"bands": {name: [] for name in self.bands}}
 

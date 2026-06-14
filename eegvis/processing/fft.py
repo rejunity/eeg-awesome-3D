@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from ..models import EEGChunk, ProcessingState, StreamMetadata
+from ..models import ProcessingState, StreamMetadata
 from .base import EEGProcessor
 
 
@@ -41,7 +41,7 @@ class FFTProcessor(EEGProcessor):
             self._window_n = n
         return self._window
 
-    def process(self, chunk: EEGChunk, state: ProcessingState) -> dict[str, Any]:
+    def process(self, state: ProcessingState) -> dict[str, Any]:
         sr = state.sample_rate or self._sample_rate
         if sr <= 0:
             return {}
@@ -52,12 +52,11 @@ class FFTProcessor(EEGProcessor):
             return {}
         self._last_emit_frame = state.frame_index
 
-        eeg = self._eeg_view(state)  # (samples, n_eeg)
-        win_n = min(int(self.window_seconds * sr), eeg.shape[0])
-        if win_n < 8 or eeg.shape[1] == 0:
+        segment = self.latest(state, self.window_seconds)  # (win_n, n_eeg)
+        win_n = segment.shape[0]
+        if win_n < 8 or segment.shape[1] == 0:
             return {}
 
-        segment = eeg[-win_n:, :]  # (win_n, n_eeg)
         window = self._ensure_window(win_n)[:, None]
         windowed = segment * window
 

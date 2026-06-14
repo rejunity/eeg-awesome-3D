@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from ..models import EEGChunk, ProcessingState, StreamMetadata
+from ..models import ProcessingState
 from .base import EEGProcessor
 
 
@@ -31,7 +31,7 @@ class SmoothingProcessor(EEGProcessor):
     def reset(self) -> None:
         self._state = None
 
-    def process(self, chunk: EEGChunk, state: ProcessingState) -> dict[str, Any]:
+    def process(self, state: ProcessingState) -> dict[str, Any]:
         # Smoothing consumes the current frame's normalized output; the pipeline
         # passes accumulated outputs via state._frame_outputs.
         outputs = getattr(state, "_frame_outputs", {})

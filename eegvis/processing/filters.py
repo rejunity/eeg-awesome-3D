@@ -16,7 +16,7 @@ from typing import Any
 import numpy as np
 from scipy import signal as sp_signal
 
-from ..models import EEGChunk, ProcessingState, StreamMetadata
+from ..models import ProcessingState, StreamMetadata
 from .base import EEGProcessor
 
 
@@ -43,11 +43,12 @@ class _SOSFilterProcessor(EEGProcessor):
     def reset(self) -> None:
         self._zi = None
 
-    def process(self, chunk: EEGChunk, state: ProcessingState) -> dict[str, Any]:
-        if self._sos is None or chunk.data.shape[0] == 0:
+    def process(self, state: ProcessingState) -> dict[str, Any]:
+        # Stream the samples appended this tick through the stateful filter.
+        x = self.new_samples(state).astype(np.float64)  # (n_new, n_eeg)
+        if self._sos is None or x.shape[0] == 0:
             return {}
-        idx = self._eeg_indices or list(range(chunk.data.shape[1]))
-        x = chunk.data[:, idx].astype(np.float64)  # (samples, n_eeg)
+        idx = state.eeg_channel_indices or list(range(state.rolling_data.shape[1]))
         n_ch = x.shape[1]
 
         # For axis=0 input (samples, channels), sosfilt wants zi shaped

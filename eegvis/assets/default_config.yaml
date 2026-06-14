@@ -26,8 +26,8 @@ stream:
 processing:
   # Rate at which processed frames are broadcast to browsers.
   output_hz: 30
-  # Rolling analysis window length in seconds.
-  rolling_window_seconds: 5.0
+  # Sliding window of recent samples that processors read from (seconds).
+  rolling_window_seconds: 10.0
   # No processing/filtering between the stream and the visualisation: raw
   # per-channel `latest` values are sent through, and the browser maps colour
   # from a per-channel running mean/standard deviation. (Processor classes still

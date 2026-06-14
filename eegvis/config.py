@@ -60,7 +60,7 @@ class ProcessorConfig(BaseModel):
 
 class ProcessingConfig(BaseModel):
     output_hz: float = 30.0
-    rolling_window_seconds: float = 5.0
+    rolling_window_seconds: float = 10.0
     processors: list[ProcessorConfig] = Field(default_factory=list)
 
 

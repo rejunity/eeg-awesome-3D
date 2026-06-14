@@ -16,7 +16,7 @@ from typing import Any
 
 import numpy as np
 
-from ..models import EEGChunk, ProcessingState, StreamMetadata
+from ..models import ProcessingState, StreamMetadata
 from .base import EEGProcessor
 
 
@@ -44,8 +44,8 @@ class NormalizationProcessor(EEGProcessor):
         self._min = np.full(self._n_channels, np.inf)
         self._max = np.full(self._n_channels, -np.inf)
 
-    def process(self, chunk: EEGChunk, state: ProcessingState) -> dict[str, Any]:
-        eeg = self._eeg_view(state)  # (samples, n_eeg)
+    def process(self, state: ProcessingState) -> dict[str, Any]:
+        eeg = self.latest(state)  # whole window, (samples, n_eeg)
         if eeg.shape[0] == 0 or eeg.shape[1] == 0:
             return {"normalized": [], "latest": []}
 

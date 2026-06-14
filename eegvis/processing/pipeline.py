@@ -78,14 +78,16 @@ class Pipeline:
             self.configure(self._metadata)
 
     def _append(self, chunk: EEGChunk) -> None:
-        """Roll the buffer and append the chunk's samples to the end."""
+        """Roll the sliding window and append the chunk's samples to the end."""
         assert self._state is not None
         n = chunk.data.shape[0]
+        self._state.last_appended = n
         if n == 0:
             return
         self._samples_received += n
-        buf = self._state.rolling_data
-        ts = self._state.rolling_timestamps
+        state = self._state
+        buf = state.rolling_data
+        ts = state.rolling_timestamps
         if n >= self._window_samples:
             buf[:] = chunk.data[-self._window_samples:, : buf.shape[1]]
             ts[:] = chunk.timestamps[-self._window_samples:]
@@ -94,6 +96,7 @@ class Pipeline:
             buf[-n:] = chunk.data[:, : buf.shape[1]]
             ts[:-n] = ts[n:]
             ts[-n:] = chunk.timestamps
+        state.valid_samples = min(state.valid_samples + n, self._window_samples)
 
     def process(self, chunk: EEGChunk) -> EEGFramePayload | None:
         """Run a chunk through the pipeline and assemble a frame payload."""
@@ -110,16 +113,17 @@ class Pipeline:
 
         outputs: dict = {}
         setattr(state, "_frame_outputs", outputs)
+        # Processors read the sliding window via state (not the chunk directly).
         for proc in self.processors:
             if not proc.enabled:
                 continue
-            result = proc.process(chunk, state)
+            result = proc.process(state)
             if result:
                 outputs.update(result)
 
         # Band processor runs last so its `latest` reflects the selected band
         # (or raw pass-through) regardless of any configured processors.
-        band_out = self.band_select.process(chunk, state)
+        band_out = self.band_select.process(state)
         if band_out:
             outputs.update(band_out)
 

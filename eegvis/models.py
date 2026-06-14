@@ -70,6 +70,12 @@ class ProcessingState:
     rolling_data: np.ndarray
     rolling_timestamps: np.ndarray
     frame_index: int = 0
+    # Number of real samples written into the rolling window so far (capped at
+    # the window size); the leading zero pre-fill is excluded from `latest()`.
+    valid_samples: int = 0
+    # Samples appended in the most recent tick (for streaming processors that
+    # must process each new sample exactly once, e.g. stateful filters).
+    last_appended: int = 0
     # Indices (into channel_names) that are EEG channels and should drive visuals.
     eeg_channel_indices: list[int] = field(default_factory=list)
 

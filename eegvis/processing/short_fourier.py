@@ -19,7 +19,7 @@ from typing import Any
 
 import numpy as np
 
-from ..models import EEGChunk, ProcessingState, StreamMetadata
+from ..models import ProcessingState
 from .base import EEGProcessor
 
 
@@ -49,25 +49,25 @@ class ShortFourierVisualProcessor(EEGProcessor):
             self._re = np.zeros((nb, n_ch))
             self._im = np.zeros((nb, n_ch))
 
-    def process(self, chunk: EEGChunk, state: ProcessingState) -> dict[str, Any]:
-        if chunk.data.shape[0] == 0:
+    def process(self, state: ProcessingState) -> dict[str, Any]:
+        # Stream the samples appended this tick through the leaky oscillators.
+        x = self.new_samples(state).astype(np.float64)  # (n_new, n_eeg)
+        if x.shape[0] == 0:
             return self._emit()
 
-        idx = state.eeg_channel_indices or list(range(chunk.data.shape[1]))
-        x = chunk.data[:, idx].astype(np.float64)  # (samples, n_eeg)
         n_ch = x.shape[1]
         if n_ch == 0:
             return {"short_fourier": {}}
         self._ensure_state(n_ch)
 
         # Normalize each sample against the rolling-window extremes (cheap, local).
-        eeg_win = state.rolling_data[:, idx]
+        eeg_win = self.latest(state)
         mn = eeg_win.min(axis=0)
         mx = np.maximum(eeg_win.max(axis=0), mn + 1e-9)
         norm = (x - mn) / (mx - mn)  # ~[0, 1]
         norm = (norm - self.expected_mean) / self.expected_variance  # centered
 
-        t = chunk.timestamps  # (samples,)
+        t = state.rolling_timestamps[-x.shape[0]:]  # timestamps of the new samples
         # Leaky accumulation, applied sample-by-sample to match Unity's recurrence.
         for s in range(norm.shape[0]):
             eeg = norm[s, :]  # (n_eeg,)
