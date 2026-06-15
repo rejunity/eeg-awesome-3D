@@ -23,9 +23,9 @@ from .base import EEGProcessor
 class FFTProcessor(EEGProcessor):
     name = "fft"
     output_keys = ("fft",)
-    # The spectrum defaults to RAW (shows the full picture, incl. line noise);
-    # toggle input="filtered" to verify what the filter chain leaves behind.
-    default_input = "raw"
+    # The spectrum defaults to the FILTERED window (reflects the global filter
+    # chain); toggle input="raw" to see the full picture incl. line noise.
+    default_input = "filtered"
 
     def __init__(self, enabled: bool = True, **options: Any):
         super().__init__(enabled, **options)

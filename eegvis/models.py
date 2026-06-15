@@ -141,11 +141,12 @@ class EEGFramePayload(BaseModel):
     # i-th sample. Lets the browser draw the full source resolution on the trace
     # even though frames arrive in bursts.
     samples: list[list[float]] = Field(default_factory=list)
-    # Per-sample band-filtered values (per-sample filter rate): band_samples[i]
-    # = per-channel filtered value for the i-th sample of this chunk. Empty
-    # unless the band filter runs in per-sample mode.
-    band_samples: list[list[float]] = Field(default_factory=list)
-    # Post-processor value per channel (band amplitude, or raw if no band).
+    # All EEG samples in this chunk AFTER the global filter chain (notch ->
+    # bandpass): filtered_samples[i] = per-channel filtered value for sample i.
+    # Drives the processed trace and (in "signal" mode) the electrodes. Equals
+    # `samples` when no filter is enabled.
+    filtered_samples: list[list[float]] = Field(default_factory=list)
+    # Post-processor value per channel (raw last sample unless a processor sets it).
     latest: list[float]
     normalized: list[float]
     bands: dict[str, list[float]] = Field(default_factory=dict)

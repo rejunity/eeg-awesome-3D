@@ -179,10 +179,7 @@ def _handle_client_message(engine: Engine, text: str) -> None:
         return
     if not isinstance(data, dict):
         return
-    if data.get("type") == "set_band":
-        band = data.get("band")
-        engine.set_band(band if band in (None, "delta", "theta", "alpha", "beta", "gamma") else None)
-    elif data.get("type") == "set_band_run":
+    if data.get("type") == "set_band_run":
         engine.set_band_run(data.get("mode"), data.get("hz"))
     elif data.get("type") == "set_bandpass":
         engine.set_bandpass(data.get("enabled"), data.get("low_hz"), data.get("high_hz"))

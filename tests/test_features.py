@@ -146,14 +146,27 @@ def test_global_bandpass_attenuates_out_of_band():
 
 def test_global_bandpass_leaves_raw_window_intact():
     md = make_metadata(n_eeg=1, sample_rate=250.0)
-    pipe = _pipeline("fft")  # fft reads RAW by default
+    pipe = _pipeline("fft")  # fft reads FILTERED by default
     pipe.configure(md)
     pipe.set_bandpass(enabled=True, low_hz=8.0, high_hz=13.0)
-    f = _feed(pipe, 40.0, md)
-    # Raw-sourced FFT still shows the 40 Hz peak despite the alpha bandpass.
-    freqs = np.array(f.fft.freqs)
-    assert abs(freqs[int(np.argmax(f.fft.values[0]))] - 40.0) <= 1.5
-    # …but switching the FFT to the filtered window, the 40 Hz peak is gone.
-    pipe.set_fft_source("filtered")
-    f2 = _feed(pipe, 40.0, md)
-    assert np.max(f2.fft.values[0]) < np.max(f.fft.values[0])
+    f_filt = _feed(pipe, 40.0, md)  # spectrum of the filtered window
+    pipe.set_fft_source("raw")
+    f_raw = _feed(pipe, 40.0, md)  # spectrum of the raw window
+    # The raw window still has the 40 Hz peak (untouched by the alpha bandpass).
+    freqs = np.array(f_raw.fft.freqs)
+    assert abs(freqs[int(np.argmax(f_raw.fft.values[0]))] - 40.0) <= 1.5
+    # …while the filtered window suppressed it.
+    assert np.max(f_filt.fft.values[0]) < np.max(f_raw.fft.values[0])
+
+
+def test_bandstop_when_low_above_high():
+    md = make_metadata(n_eeg=1, sample_rate=250.0)
+    # low > high reverses the filter: reject the band between high and low.
+    pipe = _pipeline("band_power")
+    pipe.configure(md)
+    pipe.set_bandpass(enabled=True, low_hz=13.0, high_hz=8.0)  # stop 8..13 (alpha)
+    a_stop = np.mean(_feed(pipe, 10.0, md).features["rel_alpha"])  # 10 Hz is in the stop band
+    ref = _pipeline("band_power")
+    ref.configure(md)
+    a_ref = np.mean(_feed(ref, 10.0, md).features["rel_alpha"])
+    assert a_stop < a_ref  # the 10 Hz alpha content was rejected

@@ -5,7 +5,18 @@ import { BrainHead } from "../scene/brainHead";
 import type { ElectrodeShape } from "../scene/electrodes";
 import type { ColorScheme } from "../scene/colormap";
 
-const BANDS = ["none", "delta", "theta", "alpha", "beta", "gamma"];
+const BANDS = ["none", "delta", "theta", "alpha", "beta", "gamma", "custom"];
+
+// Curated electrode colour sources (in addition to "signal"): band powers and
+// the most useful per-channel features. Inert entries (processor not enabled)
+// simply leave the electrodes unchanged.
+const ELECTRODE_SOURCES = [
+  "signal",
+  "alpha", "beta", "theta", "delta", "gamma",
+  "rel_alpha", "theta_beta", "engagement",
+  "hjorth_mobility", "hjorth_complexity", "line_length",
+  "spectral_entropy", "aperiodic_slope", "env_alpha", "env_beta",
+];
 
 /**
  * Runtime GUI (lil-gui), recreating the spirit of the Unity controls:
@@ -27,6 +38,7 @@ export function installGUI(app: App): GUI {
     notchOn: app.filterDefaults.notchOn,
     notchHz: app.filterDefaults.notchHz,
     fftSource: app.filterDefaults.fftSource,
+    electrodeSource: app.electrodeSourceDefault,
     colorScheme: "red-green",
     colorSD: app.colorSDDefault,
     headCutaway: BrainHead.defaults.cutaway,
@@ -73,37 +85,32 @@ export function installGUI(app: App): GUI {
     .name("Color SD (±σ)")
     .onChange((v: number) => app.setColorSD(v));
 
+  // Electrode colouring: which per-channel quantity drives the 3D electrodes.
   gui
-    .add(state, "band", BANDS)
-    .name("Band processor")
-    .listen()
-    .onChange((b: string) => app.setBand(b));
+    .add(state, "electrodeSource", ELECTRODE_SOURCES)
+    .name("Electrode source")
+    .onChange((v: string) => app.setElectrodeSource(v));
 
-  gui
-    .add(state, "bandRunMode", ["realtime", "frequency", "per-sample"])
-    .name("Filter rate")
-    .onChange((m: string) => app.setBandRun(m, state.bandRunHz));
-  gui
-    .add(state, "bandRunHz", 1, 60, 1)
-    .name("Filter Hz (freq)")
-    .onChange((hz: number) => app.setBandRun(state.bandRunMode, hz));
-
-  // Global filter front-end: cleans the signal that feeds ALL feature
-  // extractors. Narrow the bandpass and flip "FFT source" to filtered to watch
-  // the spectrum collapse to the pass-band.
+  // Global filter front-end. The band selector sets the bandpass to standard
+  // band edges; "custom" uses the low/high sliders (set low > high to REJECT
+  // that band). Everything downstream — trace, electrodes, features, FFT — sees
+  // the filtered signal. Flip "FFT source" to raw to compare against the input.
   const filters = gui.addFolder("Filters (global)");
   filters
-    .add(state, "bandpassOn")
-    .name("Bandpass on")
-    .onChange((v: boolean) => app.setBandpass({ on: v }));
+    .add(state, "band", BANDS)
+    .name("Bandpass band")
+    .listen()
+    .onChange((b: string) => app.setBand(b));
   filters
-    .add(state, "bandpassLow", 0.1, 60, 0.1)
+    .add(state, "bandpassLow", 1, 120, 0.5)
     .name("Bandpass low (Hz)")
-    .onChange((v: number) => app.setBandpass({ low: v, high: state.bandpassHigh }));
+    .listen()
+    .onChange((v: number) => app.setBandpassRange(v, state.bandpassHigh));
   filters
     .add(state, "bandpassHigh", 1, 120, 0.5)
     .name("Bandpass high (Hz)")
-    .onChange((v: number) => app.setBandpass({ low: state.bandpassLow, high: v }));
+    .listen()
+    .onChange((v: number) => app.setBandpassRange(state.bandpassLow, v));
   filters
     .add(state, "notchOn")
     .name("Notch on")
@@ -113,9 +120,21 @@ export function installGUI(app: App): GUI {
     .name("Notch (Hz)")
     .onChange((v: number) => app.setNotch({ hz: v }));
   filters
-    .add(state, "fftSource", ["raw", "filtered"])
+    .add(state, "fftSource", ["filtered", "raw"])
     .name("FFT source")
     .onChange((v: string) => app.setFftSource(v));
+
+  // Feature-extractor recompute cadence (throttles bands/features, not the trace).
+  const adv = gui.addFolder("Extractor cadence");
+  adv
+    .add(state, "bandRunMode", ["realtime", "frequency", "per-sample"])
+    .name("Run mode")
+    .onChange((m: string) => app.setBandRun(m, state.bandRunHz));
+  adv
+    .add(state, "bandRunHz", 1, 60, 1)
+    .name("Run Hz (freq)")
+    .onChange((hz: number) => app.setBandRun(state.bandRunMode, hz));
+  adv.close();
 
   gui
     .add(state, "headCutaway", 0, 1, 0.01)

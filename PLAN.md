@@ -417,25 +417,27 @@ Normalize positions into a browser-friendly coordinate system:
 Orthogonal architecture — two distinct node kinds and two windows:
 
 ```
-raw window ─► notch ─► bandpass ─► (extra filters) ─► filtered window ─┬─► extractors (fan-out) ─► frame
-                  the FILTER CHAIN (ordered, stateful, runs every tick) │       band_power, fft, hjorth,
-                                                                        │       line_length, entropy, …
-   raw trace / electrodes ◄── raw window        view-band (own band) ◄──┘
+raw window ─► notch ─► bandpass ─► (extra filters) ─► filtered window ─► extractors (fan-out) ─► frame
+                  the FILTER CHAIN (ordered, stateful, runs every tick)         band_power, fft, hjorth,
+   raw trace (X) ◄── raw window      filtered trace (Z) + electrodes ◄──┘       line_length, entropy, …
 ```
 
 - **Filters** (`processing.filters` + the built-in `notch`→`bandpass` front-end):
   signal→signal, an ordered stateful chain that runs every tick and writes the
-  `filtered` window. The raw window is never mutated. The front-end is off by
-  default and controlled live (GUI "Filters (global)" / `set_bandpass`,
-  `set_notch`) — narrow it to debug, and it feeds every extractor.
+  `filtered` window. The raw window is never mutated (the raw trace stays raw).
+  The single band selector (none / delta…gamma / custom) drives the global
+  bandpass — there is no separate visual-only band. `custom` uses the low/high
+  controls, and **low > high reverses it to a band-stop** (reject that band). The
+  front-end is off by default and controlled live (GUI "Filters (global)" /
+  `set_bandpass`, `set_notch`); it feeds the trace, electrodes and every extractor.
 - **Extractors** (`processing.processors`): signal→features, an
   order-independent fan-out; each reads `filtered` by default or `raw` via
-  `input: raw|filtered` (fft and the view-band default `raw`). No extractor reads
-  another's output.
-- **View-band** (`band_select`, always-on): reads the raw window and applies its
-  own band for the trace/electrodes — independent of the global cleaning bandpass.
-- The **FFT** spectrum defaults to the raw window; toggle its source to
-  `filtered` (GUI "FFT source") to verify what the filter chain leaves behind.
+  `input: raw|filtered`. No extractor reads another's output.
+- **Electrodes** colour by a selectable source (GUI "Electrode source"): the
+  filtered `signal`, or any per-channel band-power / feature value from the frame.
+- The **FFT** spectrum defaults to the `filtered` window (reflects the chain);
+  toggle its source to `raw` (GUI "FFT source") to see the full input spectrum.
+  The per-sample `filtered_samples` stream feeds the processed trace.
 
 Create a plugin-friendly processing pipeline.
 

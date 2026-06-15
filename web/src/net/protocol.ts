@@ -40,8 +40,8 @@ export interface EEGFramePayload {
   raw: number[];
   // All raw EEG samples in this chunk: samples[i] = per-channel values.
   samples: number[][];
-  // Per-sample band-filtered values (per-sample filter rate; else empty).
-  band_samples: number[][];
+  // All EEG samples after the global filter chain (== samples if no filter).
+  filtered_samples: number[][];
   latest: number[];
   normalized: number[];
   bands: Record<string, number[]>;

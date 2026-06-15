@@ -76,37 +76,47 @@ export class App {
   private electrodeDistance = this.electrodeDefaults.distance;
   private electrodeShape: ElectrodeShape = this.electrodeDefaults.shape;
 
-  // Per-channel running mean/SD for colour mapping, and the SD span the colour
-  // gradient covers (-colorSD..+colorSD standard deviations).
-  private stats = new RunningStats();
+  // SD span the colour gradient covers (-colorSD..+colorSD standard deviations).
   readonly colorSDDefault = 2.5;
   private colorSD = this.colorSDDefault;
-  // Band processor applied on the backend to raw data ("none" = pass-through).
+  // The band selector drives the GLOBAL bandpass (none = off, custom = use the
+  // low/high controls). Standard EEG band edges (Hz):
+  static readonly BAND_RANGES: Record<string, [number, number]> = {
+    delta: [1, 4],
+    theta: [4, 8],
+    alpha: [8, 13],
+    beta: [13, 30],
+    gamma: [30, 45],
+  };
   readonly bandDefault = "none";
-  private band = this.bandDefault;
-  // How often the band filter recomputes on the backend.
+  // How often the feature extractors recompute on the backend.
   readonly bandRunDefaults = { mode: "realtime", hz: 30 };
   private bandRunMode = this.bandRunDefaults.mode;
   private bandRunHz = this.bandRunDefaults.hz;
 
-  // Global filter front-end (feeds the feature extractors) + FFT source.
+  // Global filter front-end (feeds the trace, electrodes AND extractors).
   readonly filterDefaults = {
     bandpassOn: false,
     bandpassLow: 1,
     bandpassHigh: 45,
     notchOn: false,
     notchHz: 50,
-    fftSource: "raw",
+    fftSource: "filtered",
   };
   private filters = { ...this.filterDefaults };
+  // What the 3D electrodes colour by: "signal" (filtered sample) or a band /
+  // feature key looked up in the frame's bands/features maps.
+  readonly electrodeSourceDefault = "signal";
+  private electrodeSource = this.electrodeSourceDefault;
+  private electrodeStats = new RunningStats();
 
   // Resampler: plays the fixed-rate sample stream back on the render clock.
   private resampler = new Resampler();
   private channels: string[] = [];
-  // Band mode: its own resampler + running stats so the band (filtered) stream
-  // plays back at the raw-trace speed, the same in every filter rate.
-  private bandResampler = new Resampler();
-  private bandStats = new RunningStats();
+  // The filtered (post notch+bandpass) per-sample stream: its own resampler +
+  // running stats so the processed trace plays back at the raw-trace speed.
+  private filteredResampler = new Resampler();
+  private filteredStats = new RunningStats();
 
   // Set by installGUI so presets can keep GUI widgets in sync.
   guiState: Record<string, unknown> | null = null;
@@ -183,17 +193,12 @@ export class App {
     this.socket.onClose = () => this.setStatusText("disconnected — reconnecting…", false);
     // Sync the band selection + run cadence to the backend on (re)connect.
     this.socket.onOpen = () => {
-      this._sendBand();
       this._sendBandRun();
       this._sendBandpass();
       this._sendNotch();
       this._sendFftSource();
     };
     this.socket.connect();
-  }
-
-  private _sendBand(): void {
-    this.socket.send({ type: "set_band", band: this.band === "none" ? null : this.band });
   }
 
   private _sendBandRun(): void {
@@ -226,6 +231,9 @@ export class App {
     if (opts.on !== undefined) this.filters.bandpassOn = opts.on;
     if (opts.low !== undefined) this.filters.bandpassLow = opts.low;
     if (opts.high !== undefined) this.filters.bandpassHigh = opts.high;
+    // The filtered signal's scale just changed — re-baseline its colour stats.
+    this.filteredStats = new RunningStats();
+    if (this.electrodeSource === "signal") this.electrodeStats = new RunningStats();
     this._sendBandpass();
   }
 
@@ -242,20 +250,42 @@ export class App {
     this._sendFftSource();
   }
 
-  /** Select the backend band processor applied to raw data ("none" = off). */
+  /**
+   * Band selector -> the global bandpass. "none" disables it; a named band uses
+   * its standard edges; "custom" keeps the current low/high controls.
+   */
   setBand(band: string): void {
-    this.band = band;
-    this.stats = new RunningStats(); // re-baseline; the signal changed
-    this.bandStats = new RunningStats();
-    this._sendBand();
-    if (this.guiState) this.guiState.band = band;
+    if (band === "none") {
+      this.setBandpass({ on: false });
+    } else if (band === "custom") {
+      this.setBandpass({ on: true, low: this.filters.bandpassLow, high: this.filters.bandpassHigh });
+    } else {
+      const r = App.BAND_RANGES[band];
+      if (r) this.setBandpass({ on: true, low: r[0], high: r[1] });
+    }
+    if (this.guiState) {
+      this.guiState.band = band;
+      this.guiState.bandpassLow = this.filters.bandpassLow;
+      this.guiState.bandpassHigh = this.filters.bandpassHigh;
+    }
   }
 
-  /** Set the backend band filter's recompute cadence. */
+  /** Set the bandpass edges directly (from the low/high sliders) -> "custom". */
+  setBandpassRange(low: number, high: number): void {
+    this.setBandpass({ on: true, low, high });
+    if (this.guiState) this.guiState.band = "custom";
+  }
+
+  /** Choose what the 3D electrodes colour by ("signal" or a band/feature key). */
+  setElectrodeSource(source: string): void {
+    this.electrodeSource = source;
+    this.electrodeStats = new RunningStats(); // re-baseline; the quantity changed
+  }
+
+  /** Set the feature-extractor recompute cadence. */
   setBandRun(mode: string, hz: number): void {
     this.bandRunMode = mode;
     this.bandRunHz = hz;
-    this.bandStats = new RunningStats(); // signal scale differs between modes
     this._sendBandRun();
   }
 
@@ -267,7 +297,7 @@ export class App {
       : "";
     if (s.stream) {
       this.resampler.setRate(s.stream.sample_rate);
-      this.bandResampler.setRate(s.stream.sample_rate);
+      this.filteredResampler.setRate(s.stream.sample_rate);
     }
     this._renderMeta();
   }
@@ -297,57 +327,44 @@ export class App {
   }
 
   /**
-   * Called every render frame. Moves any newly-received samples into the
-   * resampler, then plays back the buffered samples aligned to the render clock
-   * (so bursty arrivals become a steady stream). Every played-back sample feeds
-   * the traces at full resolution; the most recent drives the 3D electrodes.
-   * With a band selected its (per-frame) value drives the processed trace and
-   * electrodes instead, while the raw trace stays full resolution.
+   * Called every render frame. Plays the raw and filtered sample streams back on
+   * the render clock (bursty arrivals -> steady). The raw stream feeds the raw
+   * trace (X); the filtered stream (post notch+bandpass) feeds the processed
+   * trace (Z). The electrodes colour by the selected source: the filtered signal
+   * ("signal"), or a per-channel band-power / feature value from the frame.
    */
   private consumeFrames(nowMs: number): void {
     const sd = this.colorSD || 1;
     const clampZ = (stats: RunningStats, ch: string, x: number) =>
       Math.max(-1, Math.min(1, stats.zscore(ch, x) / sd));
 
-    const bandActive = this.band !== "none";
-
-    // 1) Ingest newly received frames. Raw samples -> resampler. The band emits
-    // the same per-sample filtered signal in every filter rate (frequency just
-    // delivers it in larger batches), so always feed band_samples to the band
-    // resampler — playback then matches the raw trace regardless of rate.
+    // 1) Ingest newly received frames into the raw + filtered resamplers.
     for (const f of this.pendingFrames) {
       this.channels = f.channels;
       this.latestFrame = f;
       this.resampler.push(f.samples);
-      if (bandActive && f.band_samples.length) {
-        this.bandResampler.push(f.band_samples);
-      }
+      this.filteredResampler.push(
+        f.filtered_samples.length ? f.filtered_samples : f.samples,
+      );
     }
     this.pendingFrames.length = 0;
 
-    // 2) Play back buffered raw samples at the source rate, on the render clock.
-    const rows = this.resampler.drain(nowMs);
-    let lastRawDisplay: number[] | null = null;
-    for (const row of rows) {
+    // 2) Raw trace (X) at the source rate.
+    for (const row of this.resampler.drain(nowMs)) {
       const rawD = row.map((x, i) => clampZ(this.rawStats, this.channels[i], x));
       this.rawTrace.push(rawD, this.channels);
-      if (this.band === "none") {
-        const d = row.map((x, i) => clampZ(this.stats, this.channels[i], x));
-        this.trace.push(d, this.channels);
-        lastRawDisplay = d;
-      }
     }
 
-    // 3) Band processed trace + electrodes: play the band stream at the source
-    // rate, exactly like the raw trace.
-    let elec = lastRawDisplay;
-    if (bandActive) {
-      for (const row of this.bandResampler.drain(nowMs)) {
-        const d = row.map((x, i) => clampZ(this.bandStats, this.channels[i], x));
-        this.trace.push(d, this.channels);
-        elec = d;
-      }
+    // 3) Filtered trace (Z) at the source rate. == raw when no filter is on.
+    let lastFiltered: number[] | null = null;
+    for (const row of this.filteredResampler.drain(nowMs)) {
+      const d = row.map((x, i) => clampZ(this.filteredStats, this.channels[i], x));
+      this.trace.push(d, this.channels);
+      lastFiltered = d;
     }
+
+    // 4) Electrodes: colour by the selected source.
+    const elec = this._electrodeValues(lastFiltered, clampZ);
     if (this.electrodes && elec) this.electrodes.update(this.channels, elec);
     if (
       (this.displayMode === "bands" ||
@@ -357,6 +374,23 @@ export class App {
     ) {
       this.bands.update(this.latestFrame);
     }
+  }
+
+  /**
+   * Per-channel electrode display values for the current source. "signal" uses
+   * the just-played filtered sample; otherwise a per-channel band-power/feature
+   * from the latest frame, z-scored over time so the colour scale is stable.
+   */
+  private _electrodeValues(
+    lastFiltered: number[] | null,
+    clampZ: (s: RunningStats, ch: string, x: number) => number,
+  ): number[] | null {
+    if (this.electrodeSource === "signal") return lastFiltered;
+    const f = this.latestFrame;
+    if (!f) return null;
+    const vals = f.features[this.electrodeSource] ?? f.bands[this.electrodeSource];
+    if (!vals || !vals.length) return null;
+    return vals.map((v, i) => clampZ(this.electrodeStats, this.channels[i], v));
   }
 
   /** SD span the electrode colour gradient covers (±colorSD std deviations). */

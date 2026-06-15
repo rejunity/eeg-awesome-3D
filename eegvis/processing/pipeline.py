@@ -23,13 +23,12 @@ from ..models import (
     QualityPayload,
     StreamMetadata,
 )
-from .band_select import BandSelectProcessor
 from .filters import BandpassProcessor, NotchProcessor
 from .registry import create_processor
 
 # Output keys that are a per-sample stream rather than a current value: they are
 # emitted only on the tick a processor actually runs, never reused between runs.
-STREAMING_KEYS = ("band_samples",)
+STREAMING_KEYS: tuple[str, ...] = ()
 # Dict-valued outputs that several processors contribute to: merge rather than
 # overwrite so each processor adds its own keys (e.g. per-channel features).
 MERGE_KEYS = ("features",)
@@ -64,9 +63,6 @@ class Pipeline:
             create_processor(p.name, p.enabled, p.options())
             for p in config.processors
         ]
-        # Always-present, runtime-selectable view-band (reads the raw window,
-        # applies its own band) feeding the trace/electrodes. None = pass-through.
-        self.band_select = BandSelectProcessor()
         # Global run cadence — applies to ALL processors, not per-processor:
         #   "realtime" / "per-sample" -> run every tick that has new samples
         #   "frequency"               -> run at most run_hz times per second
@@ -86,10 +82,6 @@ class Pipeline:
         # Last FFT block, reused on frames where the throttled FFT processor
         # produced nothing.
         self._last_fft: dict | None = None
-
-    def set_band(self, band: str | None) -> None:
-        """Select the band applied to raw data (None = raw pass-through)."""
-        self.band_select.set_band(band)
 
     def set_run(self, mode: str | None = None, hz: float | None = None) -> None:
         """Set the global processor run cadence at runtime (all processors)."""
@@ -148,7 +140,6 @@ class Pipeline:
         for p in self.filters + self.processors:
             p.configure(metadata)
             p.reset()
-        self.band_select.configure(metadata)
 
     def reset(self) -> None:
         if self._metadata is not None:
@@ -205,10 +196,10 @@ class Pipeline:
         """Assemble a frame, running the processors if the global cadence is due.
 
         Called every engine tick (at output_hz), independent of when chunks
-        arrive. The run cadence is global (see :attr:`run_mode`): on ticks where
-        the processors don't run, the last non-streaming outputs are reused so
-        the broadcast stream stays steady; per-sample stream outputs
-        (``band_samples``) are emitted only on the ticks a run happens.
+        arrive. The filter chain runs every tick (keeping the filtered window in
+        lockstep); the extractor run cadence is global (see :attr:`run_mode`), and
+        on ticks where the extractors don't run the last outputs are reused so the
+        broadcast stream stays steady.
         """
         state = self._state
         if state is None:
@@ -239,8 +230,6 @@ class Pipeline:
             for proc in self.processors:
                 if proc.enabled:
                     _merge_outputs(fresh, proc.process(state))
-            # Band processor runs last so its `latest` reflects the selected band.
-            _merge_outputs(fresh, self.band_select.process(state))
             state.samples_since_run = 0
             # Persist current-value outputs; stream outputs pass through once.
             for key, value in fresh.items():
@@ -250,7 +239,16 @@ class Pipeline:
 
         raw_samples = self._pending_raw
         self._pending_raw = []
-        return self._assemble(state, outputs, raw_samples)
+        # The post-filter version of those same new samples (== raw if no filter).
+        filtered_samples: list = []
+        n = min(len(raw_samples), state.valid_samples)
+        if n and state.filtered_data is not None and state.eeg_channel_indices:
+            filtered_samples = (
+                state.filtered_data[-n:, state.eeg_channel_indices]
+                .astype(float)
+                .tolist()
+            )
+        return self._assemble(state, outputs, raw_samples, filtered_samples)
 
     def process(self, chunk: EEGChunk) -> EEGFramePayload | None:
         """Convenience for tests: ingest one chunk and emit a frame."""
@@ -260,7 +258,11 @@ class Pipeline:
         return self.emit(time.monotonic())
 
     def _assemble(
-        self, state: ProcessingState, outputs: dict, raw_samples: list
+        self,
+        state: ProcessingState,
+        outputs: dict,
+        raw_samples: list,
+        filtered_samples: list,
     ) -> EEGFramePayload:
         channels = state.eeg_channel_names
 
@@ -274,7 +276,6 @@ class Pipeline:
             raw_latest = []
 
         latest = outputs.get("latest", raw_latest)
-        band_samples = outputs.get("band_samples", [])
         normalized = outputs.get("normalized", [])
         bands = outputs.get("bands", {})
         features = outputs.get("features", {})
@@ -300,7 +301,7 @@ class Pipeline:
             channels=channels,
             raw=raw_latest,
             samples=raw_samples,
-            band_samples=band_samples,
+            filtered_samples=filtered_samples,
             latest=latest,
             normalized=normalized,
             bands=bands,

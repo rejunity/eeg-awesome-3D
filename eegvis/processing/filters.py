@@ -93,16 +93,18 @@ class BandpassProcessor(_SOSFilterProcessor):
 
     def _design(self, sample_rate: float) -> np.ndarray | None:
         nyq = sample_rate / 2.0
-        low = max(self.low_hz, 0.01)
-        high = min(self.high_hz, nyq * 0.99)
-        if high <= low:
+        lo = max(min(self.low_hz, self.high_hz), 0.01)
+        hi = min(max(self.low_hz, self.high_hz), nyq * 0.99)
+        if hi <= lo:
             return None
+        # low < high -> keep the band (pass); low > high -> reject it (stop).
+        btype = "bandstop" if self.low_hz > self.high_hz else "bandpass"
         return sp_signal.butter(
-            self.order, [low / nyq, high / nyq], btype="bandpass", output="sos"
+            self.order, [lo / nyq, hi / nyq], btype=btype, output="sos"
         )
 
     def set_band(self, low_hz: float, high_hz: float) -> None:
-        """Retune the pass-band at runtime (e.g. narrow it for debugging)."""
+        """Retune at runtime. low < high passes the band; low > high rejects it."""
         self.low_hz = float(low_hz)
         self.high_hz = float(high_hz)
         self._redesign()
