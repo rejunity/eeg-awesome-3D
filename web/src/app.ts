@@ -48,7 +48,7 @@ export class App {
   private electrodesReadyHandlers: Array<(names: string[]) => void> = [];
   private latestFrame: EEGFramePayload | null = null;
   private autoRotate = false;
-  private displayMode: DisplayMode = "none";
+  private displayMode: DisplayMode = "trace";
 
   // Frames received but not yet rendered; the render loop drains them so it can
   // skip stale frames for the 3D view when behind.
@@ -117,6 +117,8 @@ export class App {
   // running stats so the processed trace plays back at the raw-trace speed.
   private filteredResampler = new Resampler();
   private filteredStats = new RunningStats();
+  // Per-channel mean-square envelope of the filtered signal (electrode "power").
+  private powerEma: number[] | null = null;
 
   // Set by installGUI so presets can keep GUI widgets in sync.
   guiState: Record<string, unknown> | null = null;
@@ -170,7 +172,8 @@ export class App {
   async start(): Promise<void> {
     await this.loadElectrodes();
     this.connect();
-    this.applyPreset(0);
+    this.applyPreset(0); // base scene (head/brain/cutaway); display overridden below
+    this.setDisplay("trace");
     this.renderLoop();
   }
 
@@ -276,6 +279,11 @@ export class App {
     if (this.guiState) this.guiState.band = "custom";
   }
 
+  /** Current bandpass edges [low, high] in Hz (so the GUI can sync its sliders). */
+  get bandpassRange(): [number, number] {
+    return [this.filters.bandpassLow, this.filters.bandpassHigh];
+  }
+
   /** Choose what the 3D electrodes colour by ("signal" or a band/feature key). */
   setElectrodeSource(source: string): void {
     this.electrodeSource = source;
@@ -356,11 +364,20 @@ export class App {
     }
 
     // 3) Filtered trace (Z) at the source rate. == raw when no filter is on.
+    // Also track a per-channel mean-square envelope for the "power" electrode src.
     let lastFiltered: number[] | null = null;
+    const a = 0.02; // ~0.2 s power-envelope time constant
     for (const row of this.filteredResampler.drain(nowMs)) {
       const d = row.map((x, i) => clampZ(this.filteredStats, this.channels[i], x));
       this.trace.push(d, this.channels);
       lastFiltered = d;
+      if (!this.powerEma || this.powerEma.length !== row.length) {
+        this.powerEma = row.map((x) => x * x);
+      } else {
+        for (let i = 0; i < row.length; i++) {
+          this.powerEma[i] = (1 - a) * this.powerEma[i] + a * row[i] * row[i];
+        }
+      }
     }
 
     // 4) Electrodes: colour by the selected source.
@@ -386,6 +403,10 @@ export class App {
     clampZ: (s: RunningStats, ch: string, x: number) => number,
   ): number[] | null {
     if (this.electrodeSource === "signal") return lastFiltered;
+    if (this.electrodeSource === "power") {
+      if (!this.powerEma) return null;
+      return this.powerEma.map((p, i) => clampZ(this.electrodeStats, this.channels[i], p));
+    }
     const f = this.latestFrame;
     if (!f) return null;
     const vals = f.features[this.electrodeSource] ?? f.bands[this.electrodeSource];

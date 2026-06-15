@@ -51,7 +51,7 @@ export class Electrodes {
   private nodes = new Map<string, ElectrodeNode>();
   private indicatorsVisible = true;
   private debugElectrode: string | null = null;
-  private colorScheme: ColorScheme = "red-green";
+  private colorScheme: ColorScheme = "blue-yellow";
   private shape: ElectrodeShape = "sphere";
 
   private readonly sphereGeo = new SphereGeometry(0.04, 16, 12);

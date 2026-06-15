@@ -1,34 +1,74 @@
 import GUI from "lil-gui";
 import type { App } from "../app";
-import { PRESETS } from "../scene/presets";
 import { BrainHead } from "../scene/brainHead";
 import type { ElectrodeShape } from "../scene/electrodes";
 import type { ColorScheme } from "../scene/colormap";
 
 const BANDS = ["none", "delta", "theta", "alpha", "beta", "gamma", "custom"];
 
-// Curated electrode colour sources (in addition to "signal"): band powers and
-// the most useful per-channel features. Inert entries (processor not enabled)
-// simply leave the electrodes unchanged.
+// Display modes: label -> internal mode value.
+const DISPLAYS: Record<string, string> = {
+  none: "none",
+  trace: "trace",
+  "raw signal": "rawtrace",
+  bands: "bands",
+  fft: "fft",
+  features: "features",
+};
+
+// Curated electrode colour sources: the filtered signal, its power envelope,
+// band powers, and the most useful per-channel features. Inert entries
+// (processor not enabled) simply leave the electrodes unchanged.
 const ELECTRODE_SOURCES = [
-  "signal",
+  "signal", "power",
   "alpha", "beta", "theta", "delta", "gamma",
   "rel_alpha", "theta_beta", "engagement",
   "hjorth_mobility", "hjorth_complexity", "line_length",
   "spectral_entropy", "aperiodic_slope", "env_alpha", "env_beta",
 ];
 
+// A bandpass edge slider with exponential (log) scaling 1..120 Hz, so low
+// frequencies get far more resolution than high ones. Exposes the current Hz
+// and a setter so a band preset can sync the slider position.
+function logHzSlider(
+  folder: GUI,
+  initHz: number,
+  label: string,
+  onChange: (hz: number) => void,
+) {
+  const MIN = 1;
+  const MAX = 120;
+  const clamp = (h: number) => Math.max(MIN, Math.min(MAX, h));
+  const toT = (hz: number) => Math.log(clamp(hz) / MIN) / Math.log(MAX / MIN);
+  const toHz = (t: number) => MIN * Math.pow(MAX / MIN, t);
+  const proxy = { t: toT(initHz) };
+  const ctrl = folder.add(proxy, "t", 0, 1, 0.0001);
+  const refresh = () => ctrl.name(`${label}: ${toHz(proxy.t).toFixed(1)} Hz`);
+  ctrl.onChange(() => {
+    refresh();
+    onChange(toHz(proxy.t));
+  });
+  refresh();
+  return {
+    hz: () => toHz(proxy.t),
+    setHz: (hz: number) => {
+      proxy.t = toT(hz);
+      refresh();
+      ctrl.updateDisplay();
+    },
+  };
+}
+
 /**
- * Runtime GUI (lil-gui), recreating the spirit of the Unity controls:
- * preset selection, electrode colour mode/band, head opacity, trace invert,
- * indicator toggle, and a debug-electrode selector.
+ * Runtime GUI (lil-gui): display mode, electrode colour scheme/source, the
+ * global filter chain (bandpass band + log Hz sliders, notch), head opacity,
+ * trace invert, indicator toggle, and a debug-electrode selector.
  */
 export function installGUI(app: App): GUI {
   const gui = new GUI({ title: "EEG Awesome 3D" });
 
   const state = {
-    preset: PRESETS[0].name,
-    display: "none",
+    display: "trace",
     band: app.bandDefault,
     bandRunMode: app.bandRunDefaults.mode,
     bandRunHz: app.bandRunDefaults.hz,
@@ -39,7 +79,7 @@ export function installGUI(app: App): GUI {
     notchHz: app.filterDefaults.notchHz,
     fftSource: app.filterDefaults.fftSource,
     electrodeSource: app.electrodeSourceDefault,
-    colorScheme: "red-green",
+    colorScheme: "blue-yellow",
     colorSD: app.colorSDDefault,
     headCutaway: BrainHead.defaults.cutaway,
     indicators: true,
@@ -56,21 +96,7 @@ export function installGUI(app: App): GUI {
   };
 
   gui
-    .add(state, "preset", PRESETS.map((p) => p.name))
-    .name("Preset")
-    .onChange((name: string) => {
-      app.applyPreset(PRESETS.findIndex((p) => p.name === name));
-    });
-
-  gui
-    .add(state, "display", [
-      "none",
-      "trace",
-      "rawtrace",
-      "bands",
-      "fft",
-      "features",
-    ])
+    .add(state, "display", DISPLAYS)
     .name("Display")
     .listen()
     .onChange((mode: string) => app.setDisplay(mode as any));
@@ -96,27 +122,29 @@ export function installGUI(app: App): GUI {
   // that band). Everything downstream — trace, electrodes, features, FFT — sees
   // the filtered signal. Flip "FFT source" to raw to compare against the input.
   const filters = gui.addFolder("Filters (global)");
+  // Bandpass edges use exponential sliders (more resolution at low Hz).
+  const lowSlider = logHzSlider(filters, app.filterDefaults.bandpassLow, "Low", (hz) =>
+    app.setBandpassRange(hz, highSlider.hz()),
+  );
+  const highSlider = logHzSlider(filters, app.filterDefaults.bandpassHigh, "High", (hz) =>
+    app.setBandpassRange(lowSlider.hz(), hz),
+  );
   filters
     .add(state, "band", BANDS)
     .name("Bandpass band")
     .listen()
-    .onChange((b: string) => app.setBand(b));
-  filters
-    .add(state, "bandpassLow", 1, 120, 0.5)
-    .name("Bandpass low (Hz)")
-    .listen()
-    .onChange((v: number) => app.setBandpassRange(v, state.bandpassHigh));
-  filters
-    .add(state, "bandpassHigh", 1, 120, 0.5)
-    .name("Bandpass high (Hz)")
-    .listen()
-    .onChange((v: number) => app.setBandpassRange(state.bandpassLow, v));
+    .onChange((b: string) => {
+      app.setBand(b);
+      const [lo, hi] = app.bandpassRange;
+      lowSlider.setHz(lo);
+      highSlider.setHz(hi);
+    });
   filters
     .add(state, "notchOn")
     .name("Notch on")
     .onChange((v: boolean) => app.setNotch({ on: v }));
   filters
-    .add(state, "notchHz", [50, 60])
+    .add(state, "notchHz", { "50Hz Europe": 50, "60Hz US": 60 })
     .name("Notch (Hz)")
     .onChange((v: number) => app.setNotch({ hz: v }));
   filters
