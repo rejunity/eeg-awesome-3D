@@ -17,6 +17,8 @@ import sys
 import queue
 import time
 
+import numpy as np
+
 from ..config import AppConfig
 from ..lsl.discovery import LSLNotAvailable
 from ..lsl.receiver import LSLReceiver
@@ -127,6 +129,7 @@ class Engine:
             tick_start = time.monotonic()
             chunk = self._collect_chunk()
             if chunk is not None and chunk.data.shape[0] > 0:
+                self._apply_hum(chunk)
                 self._ensure_configured(chunk.metadata)
                 self.pipeline.ingest(chunk)
             else:
@@ -157,6 +160,22 @@ class Engine:
                 log_t = tick_start
             elapsed = time.monotonic() - tick_start
             await asyncio.sleep(max(0.0, period - elapsed))
+
+    def _apply_hum(self, chunk: EEGChunk) -> None:
+        """Add a coherent mains-hum line to every EEG channel of a chunk.
+
+        Applied to whatever source is active (synthetic OR real LSL) so the notch
+        / CAR are demonstrable on any stream. Uses the chunk's absolute
+        timestamps so the injected sine stays phase-continuous across chunks.
+        """
+        cfg = self.config.synthetic
+        if not cfg.mains_hum or cfg.mains_amplitude <= 0 or chunk.data.shape[0] == 0:
+            return
+        idx = chunk.metadata.eeg_channel_indices()
+        if not idx:
+            return
+        hum = cfg.mains_amplitude * np.sin(2.0 * np.pi * cfg.mains_hz * chunk.timestamps)
+        chunk.data[:, idx] += hum[:, None].astype(chunk.data.dtype)
 
     def _collect_chunk(self) -> EEGChunk | None:
         if self.mode == "synthetic" and self._synthetic is not None:
