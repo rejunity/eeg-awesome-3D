@@ -24,6 +24,7 @@ from ..models import (
     StreamMetadata,
 )
 from .band_select import BandSelectProcessor
+from .filters import BandpassProcessor, NotchProcessor
 from .registry import create_processor
 
 # Output keys that are a per-sample stream rather than a current value: they are
@@ -50,13 +51,21 @@ def _merge_outputs(dst: dict, out: dict) -> None:
 class Pipeline:
     def __init__(self, config: ProcessingConfig):
         self.config = config
+        # Built-in global filter front-end (always present, runtime-controllable,
+        # off by default). notch -> bandpass, then any extra configured filters
+        # (e.g. car). The chain runs every tick and produces the filtered window.
+        self.notch = NotchProcessor(enabled=False, hz=50.0)
+        self.bandpass = BandpassProcessor(enabled=False, low_hz=1.0, high_hz=45.0)
+        self.filters = [self.notch, self.bandpass] + [
+            create_processor(p.name, p.enabled, p.options()) for p in config.filters
+        ]
+        # The extractor fan-out (order-independent feature extractors).
         self.processors = [
             create_processor(p.name, p.enabled, p.options())
             for p in config.processors
         ]
-        # Always-present, runtime-selectable band processor applied to the raw
-        # buffer (before the browser normalises/colours). Defaults to None
-        # (raw pass-through).
+        # Always-present, runtime-selectable view-band (reads the raw window,
+        # applies its own band) feeding the trace/electrodes. None = pass-through.
         self.band_select = BandSelectProcessor()
         # Global run cadence — applies to ALL processors, not per-processor:
         #   "realtime" / "per-sample" -> run every tick that has new samples
@@ -89,6 +98,32 @@ class Pipeline:
         if hz:
             self.run_hz = float(hz)
 
+    def set_bandpass(
+        self,
+        enabled: bool | None = None,
+        low_hz: float | None = None,
+        high_hz: float | None = None,
+    ) -> None:
+        """Enable/retune the global bandpass at runtime (feeds all extractors)."""
+        if low_hz is not None and high_hz is not None:
+            self.bandpass.set_band(low_hz, high_hz)
+        if enabled is not None:
+            self.bandpass.enabled = bool(enabled)
+
+    def set_notch(self, enabled: bool | None = None, hz: float | None = None) -> None:
+        """Enable/retune the global notch at runtime."""
+        if hz is not None:
+            self.notch.set_freq(hz)
+        if enabled is not None:
+            self.notch.enabled = bool(enabled)
+
+    def set_fft_source(self, source: str) -> None:
+        """Switch the FFT spectrum between the raw and filtered window."""
+        if source in ("raw", "filtered"):
+            for proc in self.processors:
+                if proc.name == "fft":
+                    proc.input = source
+
     @property
     def enabled_processors(self):
         return [p for p in self.processors if p.enabled]
@@ -102,6 +137,7 @@ class Pipeline:
             sample_rate=metadata.nominal_srate,
             channel_names=metadata.channel_names,
             rolling_data=np.zeros((self._window_samples, n_ch), dtype=np.float64),
+            filtered_data=np.zeros((self._window_samples, n_ch), dtype=np.float64),
             rolling_timestamps=np.zeros(self._window_samples, dtype=np.float64),
             frame_index=0,
             eeg_channel_indices=metadata.eeg_channel_indices(),
@@ -109,7 +145,7 @@ class Pipeline:
         self._pending_raw = []
         self._persistent = {}
         self._last_run_t = -1e9
-        for p in self.processors:
+        for p in self.filters + self.processors:
             p.configure(metadata)
             p.reset()
         self.band_select.configure(metadata)
@@ -128,13 +164,21 @@ class Pipeline:
         self._samples_received += n
         state = self._state
         buf = state.rolling_data
+        fbuf = state.filtered_data  # seeded with raw; the filter chain rewrites it
         ts = state.rolling_timestamps
-        if n >= self._window_samples:
-            buf[:] = chunk.data[-self._window_samples:, : buf.shape[1]]
-            ts[:] = chunk.timestamps[-self._window_samples:]
+        w = self._window_samples
+        if n >= w:
+            new = chunk.data[-w:, : buf.shape[1]]
+            buf[:] = new
+            if fbuf is not None:
+                fbuf[:] = new
+            ts[:] = chunk.timestamps[-w:]
         else:
             buf[:-n] = buf[n:]
             buf[-n:] = chunk.data[:, : buf.shape[1]]
+            if fbuf is not None:
+                fbuf[:-n] = fbuf[n:]
+                fbuf[-n:] = chunk.data[:, : fbuf.shape[1]]
             ts[:-n] = ts[n:]
             ts[-n:] = chunk.timestamps
         state.valid_samples = min(state.valid_samples + n, self._window_samples)
@@ -171,6 +215,13 @@ class Pipeline:
             return None
         state.frame_index += 1
         setattr(state, "_output_hz", self.config.output_hz)
+
+        # Filter chain: run EVERY tick on the new samples so the filtered window
+        # stays in lockstep with the raw window (the extractor cadence below only
+        # throttles feature recomputation, never the signal front-end).
+        for filt in self.filters:
+            if filt.enabled:
+                filt.process(state)
 
         state.samples_since_run += state.last_appended
         if self.run_mode == "frequency":

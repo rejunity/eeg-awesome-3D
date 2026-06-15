@@ -89,6 +89,17 @@ export class App {
   private bandRunMode = this.bandRunDefaults.mode;
   private bandRunHz = this.bandRunDefaults.hz;
 
+  // Global filter front-end (feeds the feature extractors) + FFT source.
+  readonly filterDefaults = {
+    bandpassOn: false,
+    bandpassLow: 1,
+    bandpassHigh: 45,
+    notchOn: false,
+    notchHz: 50,
+    fftSource: "raw",
+  };
+  private filters = { ...this.filterDefaults };
+
   // Resampler: plays the fixed-rate sample stream back on the render clock.
   private resampler = new Resampler();
   private channels: string[] = [];
@@ -174,6 +185,9 @@ export class App {
     this.socket.onOpen = () => {
       this._sendBand();
       this._sendBandRun();
+      this._sendBandpass();
+      this._sendNotch();
+      this._sendFftSource();
     };
     this.socket.connect();
   }
@@ -184,6 +198,48 @@ export class App {
 
   private _sendBandRun(): void {
     this.socket.send({ type: "set_band_run", mode: this.bandRunMode, hz: this.bandRunHz });
+  }
+
+  private _sendBandpass(): void {
+    this.socket.send({
+      type: "set_bandpass",
+      enabled: this.filters.bandpassOn,
+      low_hz: this.filters.bandpassLow,
+      high_hz: this.filters.bandpassHigh,
+    });
+  }
+
+  private _sendNotch(): void {
+    this.socket.send({
+      type: "set_notch",
+      enabled: this.filters.notchOn,
+      hz: this.filters.notchHz,
+    });
+  }
+
+  private _sendFftSource(): void {
+    this.socket.send({ type: "set_fft_source", source: this.filters.fftSource });
+  }
+
+  /** Enable/retune the global bandpass that feeds the feature extractors. */
+  setBandpass(opts: { on?: boolean; low?: number; high?: number }): void {
+    if (opts.on !== undefined) this.filters.bandpassOn = opts.on;
+    if (opts.low !== undefined) this.filters.bandpassLow = opts.low;
+    if (opts.high !== undefined) this.filters.bandpassHigh = opts.high;
+    this._sendBandpass();
+  }
+
+  /** Enable/retune the global notch filter. */
+  setNotch(opts: { on?: boolean; hz?: number }): void {
+    if (opts.on !== undefined) this.filters.notchOn = opts.on;
+    if (opts.hz !== undefined) this.filters.notchHz = opts.hz;
+    this._sendNotch();
+  }
+
+  /** Switch the FFT spectrum pane between the raw and filtered window. */
+  setFftSource(source: string): void {
+    this.filters.fftSource = source;
+    this._sendFftSource();
   }
 
   /** Select the backend band processor applied to raw data ("none" = off). */

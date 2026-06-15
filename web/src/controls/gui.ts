@@ -21,6 +21,12 @@ export function installGUI(app: App): GUI {
     band: app.bandDefault,
     bandRunMode: app.bandRunDefaults.mode,
     bandRunHz: app.bandRunDefaults.hz,
+    bandpassOn: app.filterDefaults.bandpassOn,
+    bandpassLow: app.filterDefaults.bandpassLow,
+    bandpassHigh: app.filterDefaults.bandpassHigh,
+    notchOn: app.filterDefaults.notchOn,
+    notchHz: app.filterDefaults.notchHz,
+    fftSource: app.filterDefaults.fftSource,
     colorScheme: "red-green",
     colorSD: app.colorSDDefault,
     headCutaway: BrainHead.defaults.cutaway,
@@ -81,6 +87,35 @@ export function installGUI(app: App): GUI {
     .add(state, "bandRunHz", 1, 60, 1)
     .name("Filter Hz (freq)")
     .onChange((hz: number) => app.setBandRun(state.bandRunMode, hz));
+
+  // Global filter front-end: cleans the signal that feeds ALL feature
+  // extractors. Narrow the bandpass and flip "FFT source" to filtered to watch
+  // the spectrum collapse to the pass-band.
+  const filters = gui.addFolder("Filters (global)");
+  filters
+    .add(state, "bandpassOn")
+    .name("Bandpass on")
+    .onChange((v: boolean) => app.setBandpass({ on: v }));
+  filters
+    .add(state, "bandpassLow", 0.1, 60, 0.1)
+    .name("Bandpass low (Hz)")
+    .onChange((v: number) => app.setBandpass({ low: v, high: state.bandpassHigh }));
+  filters
+    .add(state, "bandpassHigh", 1, 120, 0.5)
+    .name("Bandpass high (Hz)")
+    .onChange((v: number) => app.setBandpass({ low: state.bandpassLow, high: v }));
+  filters
+    .add(state, "notchOn")
+    .name("Notch on")
+    .onChange((v: boolean) => app.setNotch({ on: v }));
+  filters
+    .add(state, "notchHz", [50, 60])
+    .name("Notch (Hz)")
+    .onChange((v: number) => app.setNotch({ hz: v }));
+  filters
+    .add(state, "fftSource", ["raw", "filtered"])
+    .name("FFT source")
+    .onChange((v: string) => app.setFftSource(v));
 
   gui
     .add(state, "headCutaway", 0, 1, 0.01)

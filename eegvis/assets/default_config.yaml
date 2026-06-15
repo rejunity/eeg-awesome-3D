@@ -33,15 +33,18 @@ processing:
   #   frequency             -> run at most run_hz times per second (cheaper)
   run_mode: realtime
   run_hz: 30
-  # Feature extractors are pure functions of the rolling window and populate the
-  # band / FFT / features display panes. The raw trace and electrode colouring
-  # are unaffected (they use the raw pass-through `samples`/`latest`).
+  # The global filter chain (signal -> signal) that produces the `filtered`
+  # window the extractors read. The built-in notch + bandpass front-end is always
+  # present and controlled live from the GUI ("Filters (global)"), off by
+  # default. List EXTRA filters here to append after it, e.g.:
+  filters: []
+  #   - {name: car}             # common average reference (spatial)
   #
-  # Preprocessing filters (transform the buffer in place; enable BEFORE the
-  # extractors so they see cleaned data) are available but off by default:
-  #   - {name: bandpass, low_hz: 1.0, high_hz: 45.0, order: 4}
-  #   - {name: notch, hz: 50.0, quality: 30.0}
-  #   - {name: car}            # common average reference
+  # Feature extractors: pure functions of the window, an order-independent
+  # fan-out that populates the band / FFT / features display panes. The raw trace
+  # and electrode colouring are unaffected (they read the raw pass-through). Each
+  # may pick its input window with `input: raw|filtered` (default filtered; fft
+  # and the view-band default raw).
   processors:
     - {name: band_power}        # absolute bands + relative power + ratios
     - {name: band_envelope}     # Hilbert amplitude per band
@@ -49,7 +52,7 @@ processing:
     - {name: line_length}
     - {name: spectral_entropy}
     - {name: aperiodic}         # 1/f slope + offset
-    - {name: fft}               # 128-bin high-resolution spectrum
+    - {name: fft}               # 128-bin spectrum (input: raw by default)
     # - {name: short_fourier}   # Unity visual-parity oscillators
     # - {name: normalization}   # moving min/max or z-score `normalized`
     # - {name: smoothing, alpha: 0.25}

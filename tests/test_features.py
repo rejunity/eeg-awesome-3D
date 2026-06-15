@@ -128,26 +128,32 @@ def test_car_removes_common_signal():
 
 # -- bandpass attenuates out-of-band power ----------------------------------
 
-def test_bandpass_attenuates_out_of_band():
+def test_global_bandpass_attenuates_out_of_band():
     md = make_metadata(n_eeg=1, sample_rate=250.0)
-    # Pass only alpha; feed a 40 Hz signal -> band_power alpha should stay low
-    # relative to a no-filter reference.
-    filtered = _pipeline_with_opts(
-        [("bandpass", {"low_hz": 8.0, "high_hz": 13.0}), ("band_power", {})]
-    )
+    # The global bandpass feeds the extractors: narrow it to alpha and the 40 Hz
+    # (gamma) relative power that band_power sees should collapse vs. no filter.
+    filtered = _pipeline("band_power")
     filtered.configure(md)
+    filtered.set_bandpass(enabled=True, low_hz=8.0, high_hz=13.0)
     a_filt = np.mean(_feed(filtered, 40.0, md).features["rel_gamma"])
-    ref = _pipeline("band_power")
+
+    ref = _pipeline("band_power")  # bandpass disabled by default -> filtered == raw
     ref.configure(md)
     a_ref = np.mean(_feed(ref, 40.0, md).features["rel_gamma"])
-    # The 40 Hz (gamma) relative power is much lower once we band-pass to alpha.
+
     assert a_filt < a_ref
 
 
-def _pipeline_with_opts(specs):
-    cfg = ProcessingConfig(
-        output_hz=30,
-        rolling_window_seconds=6.0,
-        processors=[ProcessorConfig(name=n, enabled=True, **o) for n, o in specs],
-    )
-    return Pipeline(cfg)
+def test_global_bandpass_leaves_raw_window_intact():
+    md = make_metadata(n_eeg=1, sample_rate=250.0)
+    pipe = _pipeline("fft")  # fft reads RAW by default
+    pipe.configure(md)
+    pipe.set_bandpass(enabled=True, low_hz=8.0, high_hz=13.0)
+    f = _feed(pipe, 40.0, md)
+    # Raw-sourced FFT still shows the 40 Hz peak despite the alpha bandpass.
+    freqs = np.array(f.fft.freqs)
+    assert abs(freqs[int(np.argmax(f.fft.values[0]))] - 40.0) <= 1.5
+    # …but switching the FFT to the filtered window, the 40 Hz peak is gone.
+    pipe.set_fft_source("filtered")
+    f2 = _feed(pipe, 40.0, md)
+    assert np.max(f2.fft.values[0]) < np.max(f.fft.values[0])

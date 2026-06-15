@@ -40,6 +40,9 @@ BANDS: dict[str, tuple[float, float]] = {
 class BandSelectProcessor(EEGProcessor):
     name = "band_select"
     output_keys = ("latest", "band_samples")
+    # The interactive view-band reads the RAW signal and applies its own band,
+    # so it stays independent of the global cleaning bandpass.
+    default_input = "raw"
 
     def __init__(self, band: str | None = None):
         super().__init__(enabled=True)

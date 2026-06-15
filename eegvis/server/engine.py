@@ -221,3 +221,17 @@ class Engine:
     def set_band_run(self, mode: str | None, hz: float | None) -> None:
         """Set the global processor run cadence (realtime | frequency | per-sample)."""
         self.pipeline.set_run(mode, hz)
+
+    def set_bandpass(
+        self, enabled: bool | None, low_hz: float | None, high_hz: float | None
+    ) -> None:
+        """Enable/retune the global bandpass that feeds the feature extractors."""
+        self.pipeline.set_bandpass(enabled, low_hz, high_hz)
+
+    def set_notch(self, enabled: bool | None, hz: float | None) -> None:
+        """Enable/retune the global notch filter."""
+        self.pipeline.set_notch(enabled, hz)
+
+    def set_fft_source(self, source: str) -> None:
+        """Switch the FFT spectrum between the raw and filtered window."""
+        self.pipeline.set_fft_source(source)

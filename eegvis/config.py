@@ -66,6 +66,12 @@ class ProcessingConfig(BaseModel):
     #   "frequency"               -> run at most run_hz times per second
     run_mode: str = "realtime"
     run_hz: float = 30.0
+    # The ordered global filter chain (signal -> signal), applied before the
+    # extractors and producing the `filtered` window they read. The built-in
+    # notch + bandpass front-end is always present and runtime-controllable;
+    # these are EXTRA filters appended after it (e.g. {name: car}).
+    filters: list[ProcessorConfig] = Field(default_factory=list)
+    # The extractor fan-out (signal -> features); order-independent.
     processors: list[ProcessorConfig] = Field(default_factory=list)
 
 

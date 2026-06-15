@@ -184,6 +184,14 @@ def _handle_client_message(engine: Engine, text: str) -> None:
         engine.set_band(band if band in (None, "delta", "theta", "alpha", "beta", "gamma") else None)
     elif data.get("type") == "set_band_run":
         engine.set_band_run(data.get("mode"), data.get("hz"))
+    elif data.get("type") == "set_bandpass":
+        engine.set_bandpass(data.get("enabled"), data.get("low_hz"), data.get("high_hz"))
+    elif data.get("type") == "set_notch":
+        engine.set_notch(data.get("enabled"), data.get("hz"))
+    elif data.get("type") == "set_fft_source":
+        src = data.get("source")
+        if src in ("raw", "filtered"):
+            engine.set_fft_source(src)
 
 
 async def _status_broadcaster(engine: Engine, interval: float = 2.0) -> None:

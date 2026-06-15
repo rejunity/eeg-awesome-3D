@@ -32,10 +32,14 @@ class EEGProcessor:
 
     name: str = "base"
     output_keys: tuple[str, ...] = ()
+    # Which window this processor reads: "filtered" (after the global filter
+    # chain) or "raw". Overridable per processor via the `input` option.
+    default_input: str = "filtered"
 
     def __init__(self, enabled: bool = True, **options: Any):
         self.enabled = enabled
         self.options = options
+        self.input: str = options.get("input", self.default_input)
 
     def configure(self, metadata: StreamMetadata) -> None:
         """Called once the stream metadata is known (channel count, srate)."""
@@ -55,12 +59,21 @@ class EEGProcessor:
 
     # -- helpers -------------------------------------------------------------
 
-    @staticmethod
-    def _eeg_view(state: ProcessingState) -> np.ndarray:
-        """Whole rolling window restricted to EEG channels: shape (window, n_eeg)."""
-        if state.eeg_channel_indices:
-            return state.rolling_data[:, state.eeg_channel_indices]
+    def _buffer(self, state: ProcessingState, source: str | None = None) -> np.ndarray:
+        """The raw or filtered window buffer (whole), per ``source``/``self.input``."""
+        src = source or self.input
+        if src == "filtered" and state.filtered_data is not None:
+            return state.filtered_data
         return state.rolling_data
+
+    def _eeg_view(
+        self, state: ProcessingState, source: str | None = None
+    ) -> np.ndarray:
+        """Whole window restricted to EEG channels: shape (window, n_eeg)."""
+        buf = self._buffer(state, source)
+        if state.eeg_channel_indices:
+            return buf[:, state.eeg_channel_indices]
+        return buf
 
     def latest(self, state: ProcessingState, seconds: float | None = None) -> np.ndarray:
         """The most recent ``seconds`` of (valid) EEG samples, shape (n, n_eeg).

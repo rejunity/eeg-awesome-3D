@@ -67,8 +67,12 @@ class ProcessingState:
 
     sample_rate: float
     channel_names: list[str]
-    rolling_data: np.ndarray
+    rolling_data: np.ndarray  # the RAW window (never mutated by filters)
     rolling_timestamps: np.ndarray
+    # The FILTERED window: raw run through the global filter chain (notch ->
+    # bandpass -> …), kept in lockstep with rolling_data. Feature extractors read
+    # this by default; the raw trace/electrodes and the view-band read raw.
+    filtered_data: np.ndarray | None = None
     frame_index: int = 0
     # Number of real samples written into the rolling window so far (capped at
     # the window size); the leading zero pre-fill is excluded from `latest()`.
