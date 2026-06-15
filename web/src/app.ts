@@ -108,7 +108,7 @@ export class App {
   };
   private filters = { ...this.filterDefaults };
   // Debug: synthetic mains hum injection (only affects synthetic mode).
-  readonly mainsDefaults = { on: false, hz: 50 };
+  readonly mainsDefaults = { on: false, hz: 50, amplitude: 0.6 };
   private mains = { ...this.mainsDefaults };
   // What the 3D electrodes colour by: "signal" (filtered sample) or a band /
   // feature key looked up in the frame's bands/features maps.
@@ -238,13 +238,19 @@ export class App {
   }
 
   private _sendMainsHum(): void {
-    this.socket.send({ type: "set_mains_hum", enabled: this.mains.on, hz: this.mains.hz });
+    this.socket.send({
+      type: "set_mains_hum",
+      enabled: this.mains.on,
+      hz: this.mains.hz,
+      amplitude: this.mains.amplitude,
+    });
   }
 
   /** Inject/retune a synthetic mains hum (debug; only affects synthetic mode). */
-  setMainsHum(opts: { on?: boolean; hz?: number }): void {
+  setMainsHum(opts: { on?: boolean; hz?: number; amplitude?: number }): void {
     if (opts.on !== undefined) this.mains.on = opts.on;
     if (opts.hz !== undefined) this.mains.hz = opts.hz;
+    if (opts.amplitude !== undefined) this.mains.amplitude = opts.amplitude;
     this._sendMainsHum();
   }
 

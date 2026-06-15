@@ -190,7 +190,9 @@ def _handle_client_message(engine: Engine, text: str) -> None:
         if src in ("raw", "filtered"):
             engine.set_fft_source(src)
     elif data.get("type") == "set_mains_hum":
-        engine.set_mains_hum(data.get("enabled"), data.get("hz"))
+        engine.set_mains_hum(
+            data.get("enabled"), data.get("hz"), data.get("amplitude")
+        )
 
 
 async def _status_broadcaster(engine: Engine, interval: float = 2.0) -> None:

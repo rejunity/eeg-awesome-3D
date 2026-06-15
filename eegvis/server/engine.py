@@ -232,10 +232,14 @@ class Engine:
         """Switch the FFT spectrum between the raw and filtered window."""
         self.pipeline.set_fft_source(source)
 
-    def set_mains_hum(self, enabled: bool | None, hz: float | None) -> None:
+    def set_mains_hum(
+        self, enabled: bool | None, hz: float | None, amplitude: float | None = None
+    ) -> None:
         """Inject/retune a synthetic mains hum (debug; only affects synthetic mode)."""
         cfg = self.config.synthetic
         if enabled is not None:
             cfg.mains_hum = bool(enabled)
         if hz:
             cfg.mains_hz = float(hz)
+        if amplitude is not None:
+            cfg.mains_amplitude = float(amplitude)

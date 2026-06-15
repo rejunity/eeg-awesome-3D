@@ -95,6 +95,7 @@ export function installGUI(app: App): GUI {
     electrodeSource: app.electrodeSourceDefault,
     mainsHum: app.mainsDefaults.on,
     mainsHz: app.mainsDefaults.hz,
+    mainsAmp: app.mainsDefaults.amplitude,
     colorScheme: "blue-yellow",
     colorSD: app.colorSDDefault,
     headCutaway: BrainHead.defaults.cutaway,
@@ -180,19 +181,6 @@ export function installGUI(app: App): GUI {
     .onChange((hz: number) => app.setBandRun(state.bandRunMode, hz));
   adv.close();
 
-  // Debug: inject a synthetic mains hum so the notch (and CAR) are demonstrable
-  // out of the box. Only affects synthetic mode; off by default.
-  const debug = gui.addFolder("Debug");
-  debug
-    .add(state, "mainsHum")
-    .name("Mains hum (synthetic)")
-    .onChange((v: boolean) => app.setMainsHum({ on: v }));
-  debug
-    .add(state, "mainsHz", { "50Hz Europe": 50, "60Hz US": 60 })
-    .name("Hum freq")
-    .onChange((v: number) => app.setMainsHum({ hz: v }));
-  debug.close();
-
   gui
     .add(state, "headCutaway", 0, 1, 0.01)
     .name("Head cutaway")
@@ -214,16 +202,6 @@ export function installGUI(app: App): GUI {
     .name("Auto-rotate")
     .listen()
     .onChange((v: boolean) => app.setAutoRotate(v));
-
-  // Debug electrode selector is populated once electrode metadata is known.
-  app.onElectrodesReady((names) => {
-    gui
-      .add(state, "debugElectrode", ["(none)", ...names])
-      .name("Debug electrode")
-      .onChange((n: string) =>
-        app.electrodes.setDebugElectrode(n === "(none)" ? null : n),
-      );
-  });
 
   // Anatomy: tune the brain fit and electrode-array pitch at runtime.
   const anatomy = gui.addFolder("Anatomy");
@@ -255,6 +233,32 @@ export function installGUI(app: App): GUI {
     .add(state, "headLitByElectrodes")
     .name("Head lit by electrodes")
     .onChange((v: boolean) => app.setHeadLitByElectrodes(v));
+
+  // Debug (kept at the very bottom): synthetic mains-hum injection so the notch
+  // (and CAR) are demonstrable out of the box, plus the debug-electrode probe.
+  const debug = gui.addFolder("Debug");
+  debug
+    .add(state, "mainsHum")
+    .name("Mains hum (synthetic)")
+    .onChange((v: boolean) => app.setMainsHum({ on: v }));
+  debug
+    .add(state, "mainsHz", { "50Hz Europe": 50, "60Hz US": 60 })
+    .name("Hum freq")
+    .onChange((v: number) => app.setMainsHum({ hz: v }));
+  debug
+    .add(state, "mainsAmp", 0, 3, 0.05)
+    .name("Hum power")
+    .onChange((v: number) => app.setMainsHum({ amplitude: v }));
+  // Debug-electrode selector is populated once electrode metadata is known.
+  app.onElectrodesReady((names) => {
+    debug
+      .add(state, "debugElectrode", ["(none)", ...names])
+      .name("Debug electrode")
+      .onChange((n: string) =>
+        app.electrodes.setDebugElectrode(n === "(none)" ? null : n),
+      );
+  });
+  debug.close();
 
   app.guiState = state;
   return gui;
