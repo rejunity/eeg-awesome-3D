@@ -247,7 +247,7 @@ export function installGUI(app: App): GUI {
     .onChange((v: number) => app.setMainsHum({ hz: v }));
   debug
     .add(state, "mainsAmp", 0, 3, 0.05)
-    .name("Hum power")
+    .name("Hum power (×signal)")
     .onChange((v: number) => app.setMainsHum({ amplitude: v }));
   // Debug-electrode selector is populated once electrode metadata is known.
   app.onElectrodesReady((names) => {

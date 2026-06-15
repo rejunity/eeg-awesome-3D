@@ -46,6 +46,10 @@ class Engine:
 
         self._synthetic: SyntheticStream | None = None
         self._receiver: LSLReceiver | None = None
+        # Running estimate of the signal RMS, so the debug mains hum is scaled to
+        # the stream's own amplitude (works whether it's ~unit synthetic data or
+        # microvolt LSL data).
+        self._hum_scale: float | None = None
         self._chunk_queue: "queue.Queue[EEGChunk]" = queue.Queue(maxsize=256)
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
@@ -165,16 +169,30 @@ class Engine:
         """Add a coherent mains-hum line to every EEG channel of a chunk.
 
         Applied to whatever source is active (synthetic OR real LSL) so the notch
-        / CAR are demonstrable on any stream. Uses the chunk's absolute
-        timestamps so the injected sine stays phase-continuous across chunks.
+        / CAR are demonstrable on any stream. The amplitude is a *fraction of the
+        signal's own RMS* (tracked across chunks), so it's visible whether the
+        stream is ~unit synthetic data or microvolt-scale LSL data — a fixed
+        absolute amplitude would be invisible against real EEG. The same line is
+        added to every channel (common-mode), so CAR removes it too. Uses the
+        chunk's absolute timestamps so the sine stays phase-continuous.
         """
         cfg = self.config.synthetic
         if not cfg.mains_hum or cfg.mains_amplitude <= 0 or chunk.data.shape[0] == 0:
             return
-        idx = chunk.metadata.eeg_channel_indices()
-        if not idx:
-            return
-        hum = cfg.mains_amplitude * np.sin(2.0 * np.pi * cfg.mains_hz * chunk.timestamps)
+        idx = chunk.metadata.eeg_channel_indices() or list(range(chunk.data.shape[1]))
+        eeg = chunk.data[:, idx].astype(np.float64)
+
+        # Track the signal std (EMA) BEFORE injecting, so the scale reflects the
+        # real signal's AC amplitude (ignoring any DC electrode offset) and the
+        # hum amplitude is unit-agnostic.
+        mag = float(np.std(eeg))
+        if self._hum_scale is None:
+            self._hum_scale = mag
+        else:
+            self._hum_scale = 0.9 * self._hum_scale + 0.1 * mag
+        scale = self._hum_scale if self._hum_scale and self._hum_scale > 0 else 1.0
+
+        hum = cfg.mains_amplitude * scale * np.sin(2.0 * np.pi * cfg.mains_hz * chunk.timestamps)
         chunk.data[:, idx] += hum[:, None].astype(chunk.data.dtype)
 
     def _collect_chunk(self) -> EEGChunk | None:

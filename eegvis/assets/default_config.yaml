@@ -66,8 +66,10 @@ synthetic:
   noise: 0.15
   blink_artifacts: true
   # Common-mode mains hum (to demonstrate the notch / CAR). Injected by the
-  # engine into whatever source is active — synthetic OR a real LSL stream — so
-  # it works everywhere. Off by default; toggle live from the GUI "Debug" pane.
+  # engine into whatever source is active — synthetic OR a real LSL stream.
+  # mains_amplitude is a fraction of the signal's own std, so it is visible at
+  # any unit scale (unit synthetic data or microvolt EEG). Off by default;
+  # toggle live from the GUI "Debug" pane.
   mains_hum: false
   mains_hz: 50.0
   mains_amplitude: 0.6
