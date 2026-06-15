@@ -6,17 +6,6 @@ import type { ColorScheme } from "../scene/colormap";
 
 const BANDS = ["none", "delta", "theta", "alpha", "beta", "gamma", "custom"];
 
-// Display modes: label -> internal mode value.
-const DISPLAYS: Record<string, string> = {
-  none: "none",
-  trace: "trace",
-  power: "power",
-  "raw signal": "rawtrace",
-  bands: "bands",
-  fft: "fft",
-  features: "features",
-};
-
 // Curated electrode colour sources (label -> frame key): the filtered signal,
 // its power envelope, band powers (sorted as the bandpass bands), then the most
 // useful per-channel features. Inert entries (processor not enabled) simply
@@ -41,9 +30,11 @@ const ELECTRODE_SOURCES: Record<string, string> = {
   env_beta: "env_beta",
 };
 
-// A bandpass edge slider with exponential (log) scaling 1..120 Hz, so low
-// frequencies get far more resolution than high ones. Exposes the current Hz
-// and a setter so a band preset can sync the slider position.
+// A custom bandpass-edge control: an EXPONENTIAL (log) slider over 1..120 Hz —
+// so low frequencies get far more resolution — paired with a number box on the
+// right where the Hz value can be typed directly. Built as raw DOM and appended
+// into a lil-gui folder. Exposes the current Hz and a setter so a band preset
+// can sync the slider position.
 function logHzSlider(
   folder: GUI,
   initHz: number,
@@ -55,20 +46,72 @@ function logHzSlider(
   const clamp = (h: number) => Math.max(MIN, Math.min(MAX, h));
   const toT = (hz: number) => Math.log(clamp(hz) / MIN) / Math.log(MAX / MIN);
   const toHz = (t: number) => MIN * Math.pow(MAX / MIN, t);
-  const proxy = { t: toT(initHz) };
-  const ctrl = folder.add(proxy, "t", 0, 1, 0.0001);
-  const refresh = () => ctrl.name(`${label}: ${toHz(proxy.t).toFixed(1)} Hz`);
-  ctrl.onChange(() => {
-    refresh();
-    onChange(toHz(proxy.t));
+
+  const row = document.createElement("div");
+  Object.assign(row.style, {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "2px 8px",
+    font: "11px var(--font-family, ui-monospace, monospace)",
+    color: "var(--text-color, #ebebeb)",
+  } as CSSStyleDeclaration);
+
+  const name = document.createElement("span");
+  name.textContent = label;
+  Object.assign(name.style, { flex: "0 0 70px" } as CSSStyleDeclaration);
+
+  const range = document.createElement("input");
+  range.type = "range";
+  range.min = "0";
+  range.max = "1";
+  range.step = "0.0001";
+  range.style.flex = "1";
+
+  const box = document.createElement("input");
+  box.type = "number";
+  box.min = String(MIN);
+  box.max = String(MAX);
+  box.step = "0.1";
+  Object.assign(box.style, {
+    flex: "0 0 56px",
+    width: "56px",
+    background: "var(--widget-color, #1a1a1a)",
+    color: "inherit",
+    border: "0",
+    borderRadius: "2px",
+    font: "inherit",
+    padding: "1px 4px",
+  } as CSSStyleDeclaration);
+
+  row.append(name, range, box);
+  folder.$children.appendChild(row);
+
+  let current = clamp(initHz);
+  const syncWidgets = () => {
+    range.value = String(toT(current));
+    box.value = current.toFixed(1);
+  };
+  syncWidgets();
+
+  range.addEventListener("input", () => {
+    current = clamp(toHz(parseFloat(range.value)));
+    box.value = current.toFixed(1);
+    onChange(current);
   });
-  refresh();
+  box.addEventListener("change", () => {
+    const v = parseFloat(box.value);
+    if (!Number.isFinite(v)) return;
+    current = clamp(v);
+    syncWidgets();
+    onChange(current);
+  });
+
   return {
-    hz: () => toHz(proxy.t),
+    hz: () => current,
     setHz: (hz: number) => {
-      proxy.t = toT(hz);
-      refresh();
-      ctrl.updateDisplay();
+      current = clamp(hz);
+      syncWidgets();
     },
   };
 }
@@ -78,11 +121,16 @@ function logHzSlider(
  * global filter chain (bandpass band + log Hz sliders, notch), head opacity,
  * trace invert, indicator toggle, and a debug-electrode selector.
  */
+const DEG = 180 / Math.PI;
+
 export function installGUI(app: App): GUI {
   const gui = new GUI({ title: "EEG Awesome 3D" });
+  // Sit below the top pane (the traces/FFT panel) so the controls are over the
+  // 3D viewport and never cover the panel. The display-mode dropdown lives on
+  // the pane itself (see App._buildDisplaySelect).
+  gui.domElement.style.top = "25vh";
 
   const state = {
-    display: "trace",
     band: app.bandDefault,
     bandRunMode: app.bandRunDefaults.mode,
     bandRunHz: app.bandRunDefaults.hz,
@@ -104,19 +152,13 @@ export function installGUI(app: App): GUI {
     autoRotate: false,
     debugElectrode: "(none)",
     brainScale: BrainHead.defaults.brainScale,
-    brainPitch: BrainHead.defaults.brainPitch,
-    electrodePitch: app.electrodeDefaults.pitch,
+    brainPitch: BrainHead.defaults.brainPitch * DEG,
+    electrodePitch: app.electrodeDefaults.pitch * DEG,
     electrodeHeight: app.electrodeDefaults.height,
     electrodeDistance: app.electrodeDefaults.distance,
     electrodeShape: app.electrodeDefaults.shape,
     headLitByElectrodes: app.electrodeDefaults.headLit,
   };
-
-  gui
-    .add(state, "display", DISPLAYS)
-    .name("Display")
-    .listen()
-    .onChange((mode: string) => app.setDisplay(mode as any));
 
   gui
     .add(state, "colorScheme", ["red-green", "blue-yellow"])
@@ -210,13 +252,13 @@ export function installGUI(app: App): GUI {
     .name("Brain scale")
     .onChange((v: number) => app.brainHead.setBrainScale(v));
   anatomy
-    .add(state, "brainPitch", -0.8, 0.8, 0.01)
-    .name("Brain pitch (rad)")
-    .onChange((v: number) => app.brainHead.setBrainPitch(v));
+    .add(state, "brainPitch", -45, 45, 1)
+    .name("Brain pitch (°)")
+    .onChange((v: number) => app.brainHead.setBrainPitch(v / DEG));
   anatomy
-    .add(state, "electrodePitch", -0.8, 0.8, 0.01)
-    .name("Electrode pitch (rad)")
-    .onChange((v: number) => app.setElectrodePitch(v));
+    .add(state, "electrodePitch", -45, 45, 1)
+    .name("Electrode pitch (°)")
+    .onChange((v: number) => app.setElectrodePitch(v / DEG));
   anatomy
     .add(state, "electrodeHeight", -1.5, 1.5, 0.01)
     .name("Electrode height")

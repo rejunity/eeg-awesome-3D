@@ -92,9 +92,16 @@ export class BrainHead {
   // "Head lit by electrodes" toggle being off.
   private headExcludesPointLights = true;
   // Shared shader uniforms (wired in onBeforeCompile).
-  private cutUniforms: { uCutHeight: IUniform<number>; uCutWave: IUniform<number> } = {
+  private cutUniforms: {
+    uCutHeight: IUniform<number>;
+    uCutWave: IUniform<number>;
+    uCutPitch: IUniform<number>;
+  } = {
     uCutHeight: { value: CUT_BOTTOM + (CUT_TOP - CUT_BOTTOM) * DEFAULT_CUTAWAY },
     uCutWave: { value: 0.05 },
+    // Tilt of the cut plane (radians about X), kept in step with the electrode
+    // array pitch so the cutaway follows the electrode shell.
+    uCutPitch: { value: 0 },
   };
 
   constructor() {
@@ -233,6 +240,7 @@ export class BrainHead {
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uCutHeight = this.cutUniforms.uCutHeight;
       shader.uniforms.uCutWave = this.cutUniforms.uCutWave;
+      shader.uniforms.uCutPitch = this.cutUniforms.uCutPitch;
 
       // Pass world position to the fragment shader.
       shader.vertexShader = "varying vec3 vCutWorldPos;\n" + shader.vertexShader;
@@ -244,13 +252,16 @@ export class BrainHead {
       // Discard above the (wavy) cut plane. The sin() term mirrors the Unity
       // shader's `+ sin(length(worldPos.xz))` so the cut edge undulates.
       shader.fragmentShader =
-        "varying vec3 vCutWorldPos;\nuniform float uCutHeight;\nuniform float uCutWave;\n" +
+        "varying vec3 vCutWorldPos;\nuniform float uCutHeight;\nuniform float uCutWave;\nuniform float uCutPitch;\n" +
         shader.fragmentShader;
+      // Measure height along an axis tilted by uCutPitch (about X), so the cut
+      // plane follows the electrode-array pitch instead of being level.
       shader.fragmentShader = shader.fragmentShader.replace(
         "#include <clipping_planes_fragment>",
         "#include <clipping_planes_fragment>\n" +
           "  float cutLine = uCutHeight + uCutWave * sin(length(vCutWorldPos.xz) * 6.2831);\n" +
-          "  if (vCutWorldPos.y > cutLine) discard;",
+          "  float cutH = vCutWorldPos.y * cos(uCutPitch) + vCutWorldPos.z * sin(uCutPitch);\n" +
+          "  if (cutH > cutLine) discard;",
       );
 
       // Optionally drop point-light (electrode) contribution from the head,
@@ -316,6 +327,11 @@ export class BrainHead {
   /** Runtime brain pitch in radians (about X, through the brain centre). */
   setBrainPitch(radians: number): void {
     this.brain.rotation.x = radians;
+  }
+
+  /** Tilt the cutaway plane to match the electrode-array pitch (radians, X). */
+  setCutPitch(radians: number): void {
+    this.cutUniforms.uCutPitch.value = radians;
   }
 
   /** World-space brain centre (pivot for the brain and the electrode array). */

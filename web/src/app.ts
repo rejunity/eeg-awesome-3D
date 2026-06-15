@@ -41,6 +41,8 @@ export class App {
   bands = new BandTexture();
   // 2D HUD overlay (top quarter of the screen) for the trace/band/FFT panels.
   private displayOverlay!: HTMLDivElement;
+  // The display-mode dropdown attached to the top pane (always visible).
+  private displaySelect?: HTMLSelectElement;
   // Separate running stats so the raw / power traces normalise independently.
   private rawStats = new RunningStats();
   private powerTraceStats = new RunningStats();
@@ -174,12 +176,59 @@ export class App {
 
     container.appendChild(overlay);
     this.displayOverlay = overlay;
+
+    // Size the FFT/band canvas to the pane's pixel size so its text and grid
+    // aren't stretched by the wide, short overlay.
+    const sizeBands = () =>
+      this.bands.resize(window.innerWidth, window.innerHeight * PANEL_FRACTION);
+    sizeBands();
+    window.addEventListener("resize", sizeBands);
+
+    this._buildDisplaySelect(container);
+  }
+
+  /** The display-mode dropdown that lives on the top pane (always visible). */
+  private _buildDisplaySelect(container: HTMLElement): void {
+    const sel = document.createElement("select");
+    const opts: [DisplayMode, string][] = [
+      ["none", "off"],
+      ["trace", "trace"],
+      ["power", "power"],
+      ["rawtrace", "raw signal"],
+      ["bands", "bands"],
+      ["fft", "fft"],
+      ["features", "features"],
+    ];
+    for (const [val, label] of opts) {
+      const o = document.createElement("option");
+      o.value = val;
+      o.textContent = label;
+      sel.appendChild(o);
+    }
+    sel.value = this.displayMode;
+    sel.title = "Display panel";
+    Object.assign(sel.style, {
+      position: "fixed",
+      top: "6px",
+      left: "8px",
+      zIndex: "7",
+      background: "rgba(5,7,13,0.85)",
+      color: "#cdd6f4",
+      border: "1px solid rgba(255,255,255,0.2)",
+      borderRadius: "4px",
+      font: "12px ui-monospace, monospace",
+      padding: "2px 6px",
+    } as CSSStyleDeclaration);
+    sel.addEventListener("change", () => this.setDisplay(sel.value as DisplayMode));
+    container.appendChild(sel);
+    this.displaySelect = sel;
   }
 
   async start(): Promise<void> {
     await this.loadElectrodes();
     this.connect();
     this.applyPreset(0); // base scene (head/brain/cutaway); display overridden below
+    this.brainHead.setCutPitch(this.electrodePitch); // align cutaway with pitch
     this.setDisplay("trace");
     this.renderLoop();
   }
@@ -463,7 +512,7 @@ export class App {
 
   setDisplay(mode: DisplayMode): void {
     this.displayMode = mode;
-    if (this.guiState) this.guiState.display = mode;
+    if (this.displaySelect) this.displaySelect.value = mode;
 
     if (mode === "none") {
       this.displayOverlay.style.display = "none";
@@ -517,6 +566,7 @@ export class App {
   /** Pitch the electrode array (radians about X, through the brain centre). */
   setElectrodePitch(radians: number): void {
     this.electrodePitch = radians;
+    this.brainHead.setCutPitch(radians); // keep the head cutaway aligned
     this.projectElectrodes();
   }
 

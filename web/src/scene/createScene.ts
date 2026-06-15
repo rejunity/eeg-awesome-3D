@@ -25,7 +25,18 @@ export function createScene(container: HTMLElement): SceneContext {
     0.01,
     100,
   );
-  camera.position.set(0, -0.1, 3.2);
+  // Start orbited 60° around the head's vertical axis (side of the head in
+  // view) and elevated ~15° (top of the head more visible). Spherical offset
+  // from the orbit target (radius 3.32) -> world position.
+  const R = 3.32;
+  const AZ = (60 * Math.PI) / 180;
+  const EL = (15 * Math.PI) / 180;
+  const horiz = R * Math.cos(EL);
+  camera.position.set(
+    horiz * Math.sin(AZ),
+    -1.0 + R * Math.sin(EL),
+    horiz * Math.cos(AZ),
+  );
 
   const renderer = new WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -39,6 +50,7 @@ export function createScene(container: HTMLElement): SceneContext {
   controls.maxDistance = 8;
   // Aim below the brain so the brain sits in the upper half of the screen.
   controls.target.set(0, -1.0, 0);
+  controls.update(); // adopt the initial orbited/elevated camera position
 
   scene.add(new AmbientLight(0x6677aa, 0.6));
   const key = new DirectionalLight(0xffffff, 1.1);
