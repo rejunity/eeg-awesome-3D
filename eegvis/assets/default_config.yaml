@@ -65,3 +65,8 @@ synthetic:
   amplitudes: [1.0, 0.8, 0.5, 0.3]
   noise: 0.15
   blink_artifacts: true
+  # Common-mode mains hum (to demonstrate the notch / CAR). Off by default;
+  # toggle live from the GUI "Debug" pane.
+  mains_hum: false
+  mains_hz: 50.0
+  mains_amplitude: 0.6

@@ -108,6 +108,11 @@ class SyntheticStream:
         if cfg.blink_artifacts:
             signal += self._blink(t)[:, None] * self._frontal_mask()[None, :]
 
+        # Optional mains hum: a coherent (common-mode) line on every channel, so
+        # the notch filter — and CAR — have something to remove.
+        if getattr(cfg, "mains_hum", False) and cfg.mains_amplitude > 0:
+            signal += cfg.mains_amplitude * np.sin(2 * math.pi * cfg.mains_hz * t)[:, None]
+
         # Non-EEG channels (aux/acc/trigger): give them flatter, distinct signals.
         for i, ctype in enumerate(self.metadata.channel_types or []):
             if ctype != "eeg":

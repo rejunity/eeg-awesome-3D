@@ -93,6 +93,8 @@ export function installGUI(app: App): GUI {
     notchHz: app.filterDefaults.notchHz,
     fftSource: app.filterDefaults.fftSource,
     electrodeSource: app.electrodeSourceDefault,
+    mainsHum: app.mainsDefaults.on,
+    mainsHz: app.mainsDefaults.hz,
     colorScheme: "blue-yellow",
     colorSD: app.colorSDDefault,
     headCutaway: BrainHead.defaults.cutaway,
@@ -177,6 +179,19 @@ export function installGUI(app: App): GUI {
     .name("Run Hz (freq)")
     .onChange((hz: number) => app.setBandRun(state.bandRunMode, hz));
   adv.close();
+
+  // Debug: inject a synthetic mains hum so the notch (and CAR) are demonstrable
+  // out of the box. Only affects synthetic mode; off by default.
+  const debug = gui.addFolder("Debug");
+  debug
+    .add(state, "mainsHum")
+    .name("Mains hum (synthetic)")
+    .onChange((v: boolean) => app.setMainsHum({ on: v }));
+  debug
+    .add(state, "mainsHz", { "50Hz Europe": 50, "60Hz US": 60 })
+    .name("Hum freq")
+    .onChange((v: number) => app.setMainsHum({ hz: v }));
+  debug.close();
 
   gui
     .add(state, "headCutaway", 0, 1, 0.01)

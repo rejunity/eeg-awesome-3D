@@ -82,6 +82,11 @@ class SyntheticConfig(BaseModel):
     amplitudes: list[float] = Field(default_factory=lambda: [1.0, 0.8, 0.5, 0.3])
     noise: float = 0.15
     blink_artifacts: bool = True
+    # Optional common-mode mains hum (for demonstrating the notch / CAR). Off by
+    # default; toggled live from the GUI debug pane.
+    mains_hum: bool = False
+    mains_hz: float = 50.0
+    mains_amplitude: float = 0.6
 
 
 class AppConfig(BaseModel):
