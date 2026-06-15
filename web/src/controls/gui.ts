@@ -10,22 +10,36 @@ const BANDS = ["none", "delta", "theta", "alpha", "beta", "gamma", "custom"];
 const DISPLAYS: Record<string, string> = {
   none: "none",
   trace: "trace",
+  power: "power",
   "raw signal": "rawtrace",
   bands: "bands",
   fft: "fft",
   features: "features",
 };
 
-// Curated electrode colour sources: the filtered signal, its power envelope,
-// band powers, and the most useful per-channel features. Inert entries
-// (processor not enabled) simply leave the electrodes unchanged.
-const ELECTRODE_SOURCES = [
-  "signal", "power",
-  "alpha", "beta", "theta", "delta", "gamma",
-  "rel_alpha", "theta_beta", "engagement",
-  "hjorth_mobility", "hjorth_complexity", "line_length",
-  "spectral_entropy", "aperiodic_slope", "env_alpha", "env_beta",
-];
+// Curated electrode colour sources (label -> frame key): the filtered signal,
+// its power envelope, band powers (sorted as the bandpass bands), then the most
+// useful per-channel features. Inert entries (processor not enabled) simply
+// leave the electrodes unchanged.
+const ELECTRODE_SOURCES: Record<string, string> = {
+  signal: "signal",
+  power: "power",
+  delta_power: "delta",
+  theta_power: "theta",
+  alpha_power: "alpha",
+  beta_power: "beta",
+  gamma_power: "gamma",
+  rel_alpha: "rel_alpha",
+  theta_beta: "theta_beta",
+  engagement: "engagement",
+  hjorth_mobility: "hjorth_mobility",
+  hjorth_complexity: "hjorth_complexity",
+  line_length: "line_length",
+  spectral_entropy: "spectral_entropy",
+  aperiodic_slope: "aperiodic_slope",
+  env_alpha: "env_alpha",
+  env_beta: "env_beta",
+};
 
 // A bandpass edge slider with exponential (log) scaling 1..120 Hz, so low
 // frequencies get far more resolution than high ones. Exposes the current Hz

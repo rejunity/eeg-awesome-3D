@@ -4,8 +4,9 @@ import { PRESETS } from "../scene/presets";
 /**
  * Keyboard controls mirroring Unity's Controls.cs:
  *   Space : toggle electrode indicators
- *   Z     : EEG strip display
- *   X     : raw trace display
+ *   Z     : signal trace display
+ *   X     : power trace display
+ *   R     : raw signal trace display
  *   C     : FFT spectrum display
  *   V     : feature heatmap display
  *   1–7   : visual presets
@@ -27,7 +28,11 @@ export function installKeyboard(app: App): void {
         break;
       case "x":
       case "X":
-        app.toggleDisplay("rawtrace"); // raw traces, before processors
+        app.toggleDisplay("power"); // power (mean-square envelope) traces
+        break;
+      case "r":
+      case "R":
+        app.toggleDisplay("rawtrace"); // raw signal, before filtering
         break;
       case "c":
       case "C":

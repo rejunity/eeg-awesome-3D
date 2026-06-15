@@ -17,6 +17,7 @@ import type {
 export type DisplayMode =
   | "none"
   | "trace"
+  | "power"
   | "rawtrace"
   | "bands"
   | "fft"
@@ -34,13 +35,15 @@ export class App {
   ctx: SceneContext;
   brainHead = new BrainHead();
   electrodes!: Electrodes;
-  trace = new EEGTraceTexture(); // processed (post-processor) trace
-  rawTrace = new EEGTraceTexture(); // raw (pre-processor) trace
+  trace = new EEGTraceTexture(); // processed (filtered) signal trace
+  powerTrace = new EEGTraceTexture(); // power (mean-square envelope) trace
+  rawTrace = new EEGTraceTexture(); // raw (pre-filter) trace
   bands = new BandTexture();
   // 2D HUD overlay (top quarter of the screen) for the trace/band/FFT panels.
   private displayOverlay!: HTMLDivElement;
-  // Separate running stats so the raw trace is normalised independently.
+  // Separate running stats so the raw / power traces normalise independently.
   private rawStats = new RunningStats();
+  private powerTraceStats = new RunningStats();
 
   private socket = new EEGSocket();
   private clock = new Clock();
@@ -151,6 +154,7 @@ export class App {
 
     const canvases = [
       this.trace.domElement,
+      this.powerTrace.domElement,
       this.rawTrace.domElement,
       this.bands.domElement,
     ];
@@ -236,7 +240,11 @@ export class App {
     if (opts.high !== undefined) this.filters.bandpassHigh = opts.high;
     // The filtered signal's scale just changed — re-baseline its colour stats.
     this.filteredStats = new RunningStats();
-    if (this.electrodeSource === "signal") this.electrodeStats = new RunningStats();
+    this.powerTraceStats = new RunningStats();
+    this.powerEma = null;
+    if (this.electrodeSource === "signal" || this.electrodeSource === "power") {
+      this.electrodeStats = new RunningStats();
+    }
     this._sendBandpass();
   }
 
@@ -378,6 +386,10 @@ export class App {
           this.powerEma[i] = (1 - a) * this.powerEma[i] + a * row[i] * row[i];
         }
       }
+      const pd = this.powerEma.map((p, i) =>
+        clampZ(this.powerTraceStats, this.channels[i], p),
+      );
+      this.powerTrace.push(pd, this.channels);
     }
 
     // 4) Electrodes: colour by the selected source.
@@ -442,6 +454,7 @@ export class App {
       if (this.latestFrame) this.bands.update(this.latestFrame);
     }
     this.trace.domElement.style.display = mode === "trace" ? "block" : "none";
+    this.powerTrace.domElement.style.display = mode === "power" ? "block" : "none";
     this.rawTrace.domElement.style.display = mode === "rawtrace" ? "block" : "none";
     this.bands.domElement.style.display = matrix ? "block" : "none";
     this.displayOverlay.style.display = "block";
