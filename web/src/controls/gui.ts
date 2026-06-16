@@ -47,26 +47,42 @@ function logHzSlider(
   const toT = (hz: number) => Math.log(clamp(hz) / MIN) / Math.log(MAX / MIN);
   const toHz = (t: number) => MIN * Math.pow(MAX / MIN, t);
 
+  // Reuse lil-gui's row layout classes; the bar itself is a thin track + fill
+  // styled with lil-gui's CSS vars, so it matches the other (neat) sliders.
   const row = document.createElement("div");
-  Object.assign(row.style, {
+  row.className = "controller";
+  const name = document.createElement("div");
+  name.className = "name";
+  name.textContent = label;
+  const widget = document.createElement("div");
+  widget.className = "widget";
+  Object.assign(widget.style, {
     display: "flex",
     alignItems: "center",
     gap: "6px",
-    padding: "2px 8px",
-    font: "11px var(--font-family, ui-monospace, monospace)",
-    color: "var(--text-color, #ebebeb)",
   } as CSSStyleDeclaration);
 
-  const name = document.createElement("span");
-  name.textContent = label;
-  Object.assign(name.style, { flex: "0 0 70px" } as CSSStyleDeclaration);
-
-  const range = document.createElement("input");
-  range.type = "range";
-  range.min = "0";
-  range.max = "1";
-  range.step = "0.0001";
-  range.style.flex = "1";
+  const track = document.createElement("div");
+  Object.assign(track.style, {
+    position: "relative",
+    flex: "1",
+    height: "var(--widget-height, 20px)",
+    borderRadius: "2px",
+    background: "var(--widget-color, #1a1a1a)",
+    cursor: "ew-resize",
+    overflow: "hidden",
+  } as CSSStyleDeclaration);
+  const fill = document.createElement("div");
+  Object.assign(fill.style, {
+    position: "absolute",
+    top: "0",
+    left: "0",
+    height: "100%",
+    background: "var(--number-color, #2cc9ff)",
+    opacity: "0.55",
+    pointerEvents: "none",
+  } as CSSStyleDeclaration);
+  track.appendChild(fill);
 
   const box = document.createElement("input");
   box.type = "number";
@@ -74,36 +90,46 @@ function logHzSlider(
   box.max = String(MAX);
   box.step = "0.1";
   Object.assign(box.style, {
-    flex: "0 0 56px",
-    width: "56px",
+    flex: "0 0 50px",
+    width: "50px",
     background: "var(--widget-color, #1a1a1a)",
-    color: "inherit",
+    color: "var(--text-color, #ebebeb)",
     border: "0",
     borderRadius: "2px",
     font: "inherit",
-    padding: "1px 4px",
+    padding: "2px 4px",
   } as CSSStyleDeclaration);
 
-  row.append(name, range, box);
+  widget.append(track, box);
+  row.append(name, widget);
   folder.$children.appendChild(row);
 
   let current = clamp(initHz);
-  const syncWidgets = () => {
-    range.value = String(toT(current));
+  const render = () => {
+    fill.style.width = `${toT(current) * 100}%`;
     box.value = current.toFixed(1);
   };
-  syncWidgets();
+  render();
 
-  range.addEventListener("input", () => {
-    current = clamp(toHz(parseFloat(range.value)));
-    box.value = current.toFixed(1);
+  const setFromX = (clientX: number) => {
+    const r = track.getBoundingClientRect();
+    const t = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    current = clamp(toHz(t));
+    render();
     onChange(current);
+  };
+  track.addEventListener("pointerdown", (e) => {
+    track.setPointerCapture(e.pointerId);
+    setFromX(e.clientX);
+  });
+  track.addEventListener("pointermove", (e) => {
+    if (e.buttons & 1) setFromX(e.clientX);
   });
   box.addEventListener("change", () => {
     const v = parseFloat(box.value);
     if (!Number.isFinite(v)) return;
     current = clamp(v);
-    syncWidgets();
+    render();
     onChange(current);
   });
 
@@ -111,7 +137,7 @@ function logHzSlider(
     hz: () => current,
     setHz: (hz: number) => {
       current = clamp(hz);
-      syncWidgets();
+      render();
     },
   };
 }
@@ -125,10 +151,11 @@ const DEG = 180 / Math.PI;
 
 export function installGUI(app: App): GUI {
   const gui = new GUI({ title: "EEG Awesome 3D" });
-  // Sit below the top pane (the traces/FFT panel) so the controls are over the
-  // 3D viewport and never cover the panel. The display-mode dropdown lives on
-  // the pane itself (see App._buildDisplaySelect).
-  gui.domElement.style.top = "25vh";
+  // The app positions the panel just below the top pane (or just under the
+  // display dropdown when the pane is off), so it follows the 3D viewport top
+  // and never covers the panel. The display-mode dropdown lives on the pane
+  // itself (see App._buildDisplaySelect).
+  app.setGuiPanel(gui.domElement);
 
   const state = {
     band: app.bandDefault,
@@ -140,6 +167,7 @@ export function installGUI(app: App): GUI {
     notchOn: app.filterDefaults.notchOn,
     notchHz: app.filterDefaults.notchHz,
     fftSource: app.filterDefaults.fftSource,
+    fftContrast: 0.7,
     electrodeSource: app.electrodeSourceDefault,
     mainsHum: app.mainsDefaults.on,
     mainsHz: app.mainsDefaults.hz,
@@ -181,13 +209,7 @@ export function installGUI(app: App): GUI {
   // that band). Everything downstream — trace, electrodes, features, FFT — sees
   // the filtered signal. Flip "FFT source" to raw to compare against the input.
   const filters = gui.addFolder("Filters (global)");
-  // Bandpass edges use exponential sliders (more resolution at low Hz).
-  const lowSlider = logHzSlider(filters, app.filterDefaults.bandpassLow, "Low", (hz) =>
-    app.setBandpassRange(hz, highSlider.hz()),
-  );
-  const highSlider = logHzSlider(filters, app.filterDefaults.bandpassHigh, "High", (hz) =>
-    app.setBandpassRange(lowSlider.hz(), hz),
-  );
+  // Band selector sits above the Low/High edges.
   filters
     .add(state, "band", BANDS)
     .name("Bandpass band")
@@ -198,6 +220,14 @@ export function installGUI(app: App): GUI {
       lowSlider.setHz(lo);
       highSlider.setHz(hi);
     });
+  // Bandpass edges: exponential sliders (more resolution at low Hz) with an
+  // editable Hz box; styled to match the other lil-gui sliders.
+  const lowSlider = logHzSlider(filters, app.filterDefaults.bandpassLow, "Low", (hz) =>
+    app.setBandpassRange(hz, highSlider.hz()),
+  );
+  const highSlider = logHzSlider(filters, app.filterDefaults.bandpassHigh, "High", (hz) =>
+    app.setBandpassRange(lowSlider.hz(), hz),
+  );
   filters
     .add(state, "notchOn")
     .name("Notch on")
@@ -210,6 +240,10 @@ export function installGUI(app: App): GUI {
     .add(state, "fftSource", ["filtered", "raw"])
     .name("FFT source")
     .onChange((v: string) => app.setFftSource(v));
+  filters
+    .add(state, "fftContrast", 0, 1, 0.05)
+    .name("FFT contrast")
+    .onChange((v: number) => app.setFftContrast(v));
 
   // Feature-extractor recompute cadence (throttles bands/features, not the trace).
   const adv = gui.addFolder("Extractor cadence");

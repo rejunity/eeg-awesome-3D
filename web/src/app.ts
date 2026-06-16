@@ -43,6 +43,8 @@ export class App {
   private displayOverlay!: HTMLDivElement;
   // The display-mode dropdown attached to the top pane (always visible).
   private displaySelect?: HTMLSelectElement;
+  // The lil-gui control panel, repositioned to follow the viewport top.
+  private guiPanel?: HTMLElement;
   // Separate running stats so the raw / power traces normalise independently.
   private rawStats = new RunningStats();
   private powerTraceStats = new RunningStats();
@@ -331,6 +333,26 @@ export class App {
     this._sendFftSource();
   }
 
+  /** Heatmap contrast for the band/FFT panes (amount in [0,1]). */
+  setFftContrast(amount: number): void {
+    this.bands.setContrast(amount);
+    if (this.latestFrame) this.bands.update(this.latestFrame);
+  }
+
+  /** Register the lil-gui panel so it can follow the top of the 3D viewport. */
+  setGuiPanel(el: HTMLElement): void {
+    this.guiPanel = el;
+    this._layoutGuiPanel();
+  }
+
+  /** Position the control panel below the top pane, or just under the display
+   *  dropdown when the pane is off (so it follows the viewport's top edge). */
+  private _layoutGuiPanel(): void {
+    if (this.guiPanel) {
+      this.guiPanel.style.top = this.displayMode === "none" ? "38px" : "25vh";
+    }
+  }
+
   /**
    * Band selector -> the global bandpass. "none" disables it; a named band uses
    * its standard edges; "custom" keeps the current low/high controls.
@@ -513,6 +535,7 @@ export class App {
   setDisplay(mode: DisplayMode): void {
     this.displayMode = mode;
     if (this.displaySelect) this.displaySelect.value = mode;
+    this._layoutGuiPanel();
 
     if (mode === "none") {
       this.displayOverlay.style.display = "none";

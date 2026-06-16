@@ -20,14 +20,23 @@ const GUTTER = 54; // left column reserved for channel names (px)
 const LABEL_FONT = "10px ui-monospace, monospace";
 const AXIS_FONT = "9px ui-monospace, monospace";
 
-// Contrast boost: expand low values so faint spectral detail is visible.
-const contrast = (v: number) => Math.pow(Math.max(0, Math.min(1, v)), 0.4);
-
 export class BandTexture {
   readonly texture: CanvasTexture;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private mode: BandMode = "bands";
+  // Heatmap contrast gamma: <1 expands low values (more contrast). Adjustable.
+  private gamma = 0.4;
+
+  // Expand low values so faint spectral detail is visible.
+  private contrast(v: number): number {
+    return Math.pow(Math.max(0, Math.min(1, v)), this.gamma);
+  }
+
+  /** Set the heatmap contrast (amount in [0,1]; higher = more contrast). */
+  setContrast(amount: number): void {
+    this.gamma = Math.max(0.15, Math.min(1, 1 - amount * 0.85));
+  }
 
   constructor(width = 1024, height = 320) {
     this.canvas = document.createElement("canvas");
@@ -81,7 +90,7 @@ export class BandTexture {
     for (let b = 0; b < BAND_ORDER.length; b++) {
       const values = frame.bands[BAND_ORDER[b]] ?? [];
       for (let i = 0; i < nCh; i++) {
-        ctx.fillStyle = `#${heat(contrast(values[i] ?? 0)).getHexString()}`;
+        ctx.fillStyle = `#${heat(this.contrast(values[i] ?? 0)).getHexString()}`;
         ctx.fillRect(GUTTER + b * cellW, i * cellH, cellW - 1, cellH - 1);
       }
     }
@@ -107,7 +116,7 @@ export class BandTexture {
 
     for (let i = 0; i < nCh; i++) {
       for (let f = 0; f < nBins; f++) {
-        ctx.fillStyle = `#${heat(contrast((values[i][f] ?? 0) / max)).getHexString()}`;
+        ctx.fillStyle = `#${heat(this.contrast((values[i][f] ?? 0) / max)).getHexString()}`;
         ctx.fillRect(GUTTER + f * cellW, i * cellH, Math.max(1, cellW), cellH);
       }
     }

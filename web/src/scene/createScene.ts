@@ -25,11 +25,11 @@ export function createScene(container: HTMLElement): SceneContext {
     0.01,
     100,
   );
-  // Start orbited 60° around the head's vertical axis (side of the head in
+  // Start orbited 45° around the head's vertical axis (side of the head in
   // view) and elevated ~15° (top of the head more visible). Spherical offset
   // from the orbit target (radius 3.32) -> world position.
   const R = 3.32;
-  const AZ = (60 * Math.PI) / 180;
+  const AZ = (45 * Math.PI) / 180;
   const EL = (15 * Math.PI) / 180;
   const horiz = R * Math.cos(EL);
   camera.position.set(

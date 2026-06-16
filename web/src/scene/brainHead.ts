@@ -33,7 +33,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 // Cutaway range in world Y, matched to the head's extent (~[-3.25, 0.47]).
 const CUT_TOP = 0.6; // cut at/above this -> whole head visible
 const CUT_BOTTOM = -3.3; // cut at/below this -> head fully discarded
-const DEFAULT_CUTAWAY = 0.72; // initial cutaway (1 = full head, 0 = fully cut)
+const DEFAULT_CUTAWAY = 0.68; // initial cutaway (1 = full head, 0 = fully cut)
 
 // The electrode markers use point lights. Three.js light "layers" are tested
 // against the camera (not per object), so they can't exclude a single object.
