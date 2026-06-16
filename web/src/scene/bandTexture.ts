@@ -181,19 +181,46 @@ export class BandTexture {
     const regions = asym.regions; // rows
     const cellH = height / regions.length;
     const cellW = (width - GUTTER) / BAND_ORDER.length;
-
-    // Scale magnitude to the panel max for contrast (sign preserved).
-    let maxAbs = 1e-6;
-    for (const b of BAND_ORDER) {
-      for (const v of asym.bands[b] ?? []) maxAbs = Math.max(maxAbs, Math.abs(v));
-    }
+    // (R-L)/(R+L) magnitude that fills the bar to the cell edge.
+    const FULL_SCALE = 0.3;
+    const warm = `#${diverging(1).getHexString()}`; // right-dominant
+    const cool = `#${diverging(-1).getHexString()}`; // left-dominant
 
     for (let c = 0; c < BAND_ORDER.length; c++) {
       const vals = asym.bands[BAND_ORDER[c]] ?? [];
       for (let r = 0; r < regions.length; r++) {
-        const v = (vals[r] ?? 0) / maxAbs;
-        ctx.fillStyle = `#${diverging(v).getHexString()}`;
-        ctx.fillRect(GUTTER + c * cellW, r * cellH, cellW - 1, cellH - 1);
+        const x0 = GUTTER + c * cellW;
+        const y0 = r * cellH;
+        // Cell background + faint frame.
+        ctx.fillStyle = "#0d1119";
+        ctx.fillRect(x0, y0, cellW - 1, cellH - 1);
+
+        const midX = x0 + cellW / 2;
+        const midY = y0 + cellH / 2;
+        const halfW = ((cellW - 2) / 2) * 0.9;
+        const barH = Math.max(3, cellH * 0.42);
+
+        // Centre ("balanced") reference line.
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        ctx.beginPath();
+        ctx.moveTo(midX, y0 + 2);
+        ctx.lineTo(midX, y0 + cellH - 3);
+        ctx.stroke();
+
+        // Balance bar: grows from centre toward the dominant hemisphere.
+        const v = vals[r] ?? 0;
+        const pos = Math.max(-1, Math.min(1, v / FULL_SCALE));
+        const endX = midX + pos * halfW;
+        ctx.fillStyle = pos >= 0 ? warm : cool;
+        ctx.fillRect(
+          Math.min(midX, endX),
+          midY - barH / 2,
+          Math.max(1, Math.abs(endX - midX)),
+          barH,
+        );
+        // Bright thumb at the bar end.
+        ctx.fillStyle = "#e8eefc";
+        ctx.fillRect(endX - 1, midY - barH / 2 - 1, 2, barH + 2);
       }
     }
     this.drawColLabels(BAND_ORDER, cellW);
