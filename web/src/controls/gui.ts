@@ -2,7 +2,6 @@ import GUI from "lil-gui";
 import type { App } from "../app";
 import { BrainHead } from "../scene/brainHead";
 import { DEFAULT_LABEL_SCALE, type ElectrodeShape } from "../scene/electrodes";
-import type { ColorScheme } from "../scene/colormap";
 
 const BANDS = ["none", "delta", "theta", "alpha", "beta", "gamma", "custom"];
 
@@ -197,9 +196,13 @@ export function installGUI(app: App): GUI {
   };
 
   gui
-    .add(state, "colorScheme", ["red-green", "blue-yellow"])
+    .add(state, "colorScheme", {
+      "red-green": "red-green",
+      "blue-yellow": "blue-yellow",
+      "black & white (absolute)": "black-white",
+    })
     .name("Color scheme")
-    .onChange((v: string) => app.electrodes.setColorScheme(v as ColorScheme));
+    .onChange((v: string) => app.setColorScheme(v));
 
   gui
     .add(state, "colorSD", 0.5, 6.0, 0.1)

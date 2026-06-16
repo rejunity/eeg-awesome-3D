@@ -91,6 +91,10 @@ export class App {
   // SD span the colour gradient covers (-colorSD..+colorSD standard deviations).
   readonly colorSDDefault = 2.5;
   private colorSD = this.colorSDDefault;
+  private colorScheme = "blue-yellow";
+  // Most recent raw (un-normalised) filtered sample row, for the "signal"
+  // electrode source (so its normalisation can differ from the trace's).
+  private lastFilteredRow: number[] | null = null;
   // The band selector drives the GLOBAL bandpass (none = off, custom = use the
   // low/high controls). Standard EEG band edges (Hz):
   static readonly BAND_RANGES: Record<string, [number, number]> = {
@@ -282,6 +286,7 @@ export class App {
     const data: ElectrodeResponse = await res.json();
     this.electrodes = new Electrodes(data.electrodes);
     this.electrodes.setShape(this.electrodeShape);
+    this.electrodes.setColorSD(this.colorSD);
     this.setHeadLitByElectrodes(this.electrodeDefaults.headLit);
     this.ctx.scene.add(this.electrodes.group);
     // Project electrodes onto the head surface once the head model is ready,
@@ -509,6 +514,12 @@ export class App {
     const sd = this.colorSD || 1;
     const clampZ = (stats: RunningStats, ch: string, x: number) =>
       Math.max(-1, Math.min(1, stats.zscore(ch, x) / sd));
+    // Electrode normalisation: the diverging palettes use Color SD as a span
+    // (divide); the black-white palette uses it as a brightness gain (multiply),
+    // so its magnitude is taken at sd = 1 here and scaled in electrodeColor.
+    const eSd = this.colorScheme === "black-white" ? 1 : sd;
+    const clampE = (stats: RunningStats, ch: string, x: number) =>
+      Math.max(-1, Math.min(1, stats.zscore(ch, x) / eSd));
 
     // 1) Ingest newly received frames into the raw + filtered resamplers.
     for (const f of this.pendingFrames) {
@@ -529,12 +540,11 @@ export class App {
 
     // 3) Filtered trace (Z) at the source rate. == raw when no filter is on.
     // Also track a per-channel mean-square envelope for the "power" electrode src.
-    let lastFiltered: number[] | null = null;
     const a = 0.02; // ~0.2 s power-envelope time constant
     for (const row of this.filteredResampler.drain(nowMs)) {
       const d = row.map((x, i) => clampZ(this.filteredStats, this.channels[i], x));
       this.trace.push(d, this.channels);
-      lastFiltered = d;
+      this.lastFilteredRow = row;
       if (!this.powerEma || this.powerEma.length !== row.length) {
         this.powerEma = row.map((x) => x * x);
       } else {
@@ -549,7 +559,7 @@ export class App {
     }
 
     // 4) Electrodes: colour by the selected source.
-    const elec = this._electrodeValues(lastFiltered, clampZ);
+    const elec = this._electrodeValues(clampE);
     if (this.electrodes && elec) this.electrodes.update(this.channels, elec);
     if (
       (this.displayMode === "bands" ||
@@ -568,13 +578,17 @@ export class App {
    * from the latest frame, z-scored over time so the colour scale is stable.
    */
   private _electrodeValues(
-    lastFiltered: number[] | null,
-    clampZ: (s: RunningStats, ch: string, x: number) => number,
+    clampE: (s: RunningStats, ch: string, x: number) => number,
   ): number[] | null {
-    if (this.electrodeSource === "signal") return lastFiltered;
+    if (this.electrodeSource === "signal") {
+      const row = this.lastFilteredRow;
+      return row
+        ? row.map((x, i) => clampE(this.filteredStats, this.channels[i], x))
+        : null;
+    }
     if (this.electrodeSource === "power") {
       if (!this.powerEma) return null;
-      return this.powerEma.map((p, i) => clampZ(this.electrodeStats, this.channels[i], p));
+      return this.powerEma.map((p, i) => clampE(this.electrodeStats, this.channels[i], p));
     }
     const f = this.latestFrame;
     if (!f) return null;
@@ -587,12 +601,19 @@ export class App {
     }
     const vals = f.features[this.electrodeSource] ?? f.bands[this.electrodeSource];
     if (!vals || !vals.length) return null;
-    return vals.map((v, i) => clampZ(this.electrodeStats, this.channels[i], v));
+    return vals.map((v, i) => clampE(this.electrodeStats, this.channels[i], v));
   }
 
-  /** SD span the electrode colour gradient covers (±colorSD std deviations). */
+  /** Electrode colour palette. */
+  setColorScheme(scheme: string): void {
+    this.colorScheme = scheme;
+    this.electrodes?.setColorScheme(scheme as any);
+  }
+
+  /** Color SD: a ±σ span for the diverging palettes, brightness gain for B&W. */
   setColorSD(sd: number): void {
     this.colorSD = sd;
+    this.electrodes?.setColorSD(sd);
   }
 
   private setStatusText(text: string, connected: boolean): void {
