@@ -1,8 +1,10 @@
 import {
   BufferGeometry,
+  CanvasTexture,
   Color,
   ConeGeometry,
   Group,
+  LinearFilter,
   Matrix3,
   Mesh,
   MeshStandardMaterial,
@@ -10,6 +12,8 @@ import {
   PointLight,
   Quaternion,
   Raycaster,
+  Sprite,
+  SpriteMaterial,
   SphereGeometry,
   Vector3,
 } from "three";
@@ -17,12 +21,15 @@ import type { ElectrodeMeta } from "../net/protocol";
 import { electrodeColor, type ColorScheme } from "./colormap";
 
 const BLACK = new Color(0x000000);
+// How far above the electrode marker (along the outward normal) the name floats.
+const LABEL_OFFSET = 0.12;
 
 interface ElectrodeNode {
   name: string;
   mesh: Mesh;
   light: PointLight;
   material: MeshStandardMaterial;
+  label: Sprite;
   nominal: Vector3; // nominal position on the ~unit electrode shell
 }
 
@@ -74,12 +81,16 @@ export class Electrodes {
       const light = new PointLight(0x000000, 0.0, 0.8, 2.0);
       light.position.copy(nominal);
 
-      this.group.add(mesh, light);
+      const label = makeLabelSprite(meta.name);
+      label.position.copy(nominal).multiplyScalar(1 + LABEL_OFFSET);
+
+      this.group.add(mesh, light, label);
       this.nodes.set(normalize(meta.name), {
         name: meta.name,
         mesh,
         light,
         material,
+        label,
         nominal,
       });
     }
@@ -100,6 +111,11 @@ export class Electrodes {
 
   setColorScheme(scheme: ColorScheme): void {
     this.colorScheme = scheme;
+  }
+
+  /** Show/hide the floating electrode-name labels. */
+  setLabelsVisible(v: boolean): void {
+    for (const n of this.nodes.values()) n.label.visible = v;
   }
 
   setShape(shape: ElectrodeShape): void {
@@ -147,6 +163,7 @@ export class Electrodes {
         // No surface found — fall back to the nominal shell position.
         node.mesh.position.copy(nominalWorld);
         node.light.position.copy(nominalWorld);
+        node.label.position.copy(nominalWorld).addScaledVector(dir, LABEL_OFFSET);
         if (this.shape === "cone") {
           node.mesh.quaternion.copy(q.setFromUnitVectors(CONE_UP, dir));
         }
@@ -175,6 +192,7 @@ export class Electrodes {
         node.mesh.position.copy(surface);
       }
       node.light.position.copy(surface).addScaledVector(worldNormal, 0.02);
+      node.label.position.copy(surface).addScaledVector(worldNormal, LABEL_OFFSET);
     }
   }
 
@@ -209,4 +227,32 @@ export class Electrodes {
 
 function normalize(name: string): string {
   return name.trim().toUpperCase();
+}
+
+/** A billboarded text sprite (canvas texture) for an electrode name. */
+function makeLabelSprite(text: string): Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d")!;
+  ctx.font = "bold 72px ui-monospace, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  // Dark outline so the name stays legible over the brain/head.
+  ctx.lineWidth = 9;
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.85)";
+  ctx.strokeText(text, 128, 70);
+  ctx.fillStyle = "#eef3ff";
+  ctx.fillText(text, 128, 70);
+
+  const tex = new CanvasTexture(canvas);
+  tex.minFilter = LinearFilter;
+  const material = new SpriteMaterial({
+    map: tex,
+    transparent: true,
+    depthWrite: false, // labels don't occlude each other / write depth
+  });
+  const sprite = new Sprite(material);
+  sprite.scale.set(0.18, 0.09, 1); // world size (canvas aspect 2:1)
+  return sprite;
 }

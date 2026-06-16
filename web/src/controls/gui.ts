@@ -175,6 +175,7 @@ export function installGUI(app: App): GUI {
     colorSD: app.colorSDDefault,
     headCutaway: BrainHead.defaults.cutaway,
     indicators: true,
+    labels: true,
     invertTrace: false,
     autoRotate: false,
     debugElectrode: "(none)",
@@ -319,6 +320,10 @@ export function installGUI(app: App): GUI {
     .name("Indicators")
     .listen()
     .onChange((v: boolean) => app.electrodes.setIndicatorsVisible(v));
+  gui
+    .add(state, "labels")
+    .name("Electrode labels")
+    .onChange((v: boolean) => app.electrodes.setLabelsVisible(v));
   gui
     .add(state, "invertTrace")
     .name("Invert trace")
