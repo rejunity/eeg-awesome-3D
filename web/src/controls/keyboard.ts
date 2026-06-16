@@ -27,7 +27,19 @@ const BAND_KEYS: Record<string, string> = {
 export function installKeyboard(app: App): void {
   const held = new Set<string>();
 
+  // True when an editable control (GUI text/number box, dropdown) has focus, so
+  // typing numbers etc. isn't hijacked by the display/band shortcuts.
+  const isEditing = (): boolean => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el) return false;
+    const tag = el.tagName;
+    return (
+      tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable
+    );
+  };
+
   window.addEventListener("keydown", (e) => {
+    if (isEditing()) return; // let the focused control handle the key
     held.add(e.key);
     switch (e.key) {
       case "Tab":
