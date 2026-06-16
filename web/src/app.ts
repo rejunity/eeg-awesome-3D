@@ -514,12 +514,6 @@ export class App {
     const sd = this.colorSD || 1;
     const clampZ = (stats: RunningStats, ch: string, x: number) =>
       Math.max(-1, Math.min(1, stats.zscore(ch, x) / sd));
-    // Electrode normalisation: the diverging palettes use Color SD as a span
-    // (divide); the black-white palette uses it as a brightness gain (multiply),
-    // so its magnitude is taken at sd = 1 here and scaled in electrodeColor.
-    const eSd = this.colorScheme === "black-white" ? 1 : sd;
-    const clampE = (stats: RunningStats, ch: string, x: number) =>
-      Math.max(-1, Math.min(1, stats.zscore(ch, x) / eSd));
 
     // 1) Ingest newly received frames into the raw + filtered resamplers.
     for (const f of this.pendingFrames) {
@@ -559,7 +553,7 @@ export class App {
     }
 
     // 4) Electrodes: colour by the selected source.
-    const elec = this._electrodeValues(clampE);
+    const elec = this._electrodeValues(clampZ);
     if (this.electrodes && elec) this.electrodes.update(this.channels, elec);
     if (
       (this.displayMode === "bands" ||
@@ -578,30 +572,45 @@ export class App {
    * from the latest frame, z-scored over time so the colour scale is stable.
    */
   private _electrodeValues(
-    clampE: (s: RunningStats, ch: string, x: number) => number,
+    clampZ: (s: RunningStats, ch: string, x: number) => number,
   ): number[] | null {
+    // The "absolute" (black-white) palette routes raw magnitudes; the diverging
+    // palettes route the per-channel running z-score.
+    const abs = this.colorScheme === "black-white";
+
     if (this.electrodeSource === "signal") {
       const row = this.lastFilteredRow;
-      return row
-        ? row.map((x, i) => clampE(this.filteredStats, this.channels[i], x))
-        : null;
+      if (!row) return null;
+      return abs
+        ? row.map((x) => Math.abs(x))
+        : row.map((x, i) => clampZ(this.filteredStats, this.channels[i], x));
     }
     if (this.electrodeSource === "power") {
       if (!this.powerEma) return null;
-      return this.powerEma.map((p, i) => clampE(this.electrodeStats, this.channels[i], p));
+      return abs
+        ? this.powerEma.slice()
+        : this.powerEma.map((p, i) => clampZ(this.electrodeStats, this.channels[i], p));
     }
     const f = this.latestFrame;
     if (!f) return null;
-    // Asymmetry features are already signed in [-1,1]; show them directly
-    // (diverging L/R) with a gain, not z-scored over time.
+    // Asymmetry features are already signed in [-1,1]: diverging shows them
+    // directly (with a gain); absolute shows their magnitude.
     if (this.electrodeSource.startsWith("asym_")) {
       const vals = f.features[this.electrodeSource];
       if (!vals || !vals.length) return null;
-      return vals.map((v) => Math.max(-1, Math.min(1, v * 4)));
+      return abs
+        ? vals.map((v) => Math.abs(v * 4))
+        : vals.map((v) => Math.max(-1, Math.min(1, v * 4)));
     }
-    const vals = f.features[this.electrodeSource] ?? f.bands[this.electrodeSource];
+    // For band sources, prefer the absolute band power (abs_<band>) when shown
+    // on the absolute palette; otherwise the normalised band / feature value.
+    const absVals = abs ? f.features[`abs_${this.electrodeSource}`] : undefined;
+    const vals =
+      absVals ?? f.features[this.electrodeSource] ?? f.bands[this.electrodeSource];
     if (!vals || !vals.length) return null;
-    return vals.map((v, i) => clampE(this.electrodeStats, this.channels[i], v));
+    return abs
+      ? vals.map((v) => Math.abs(v))
+      : vals.map((v, i) => clampZ(this.electrodeStats, this.channels[i], v));
   }
 
   /** Electrode colour palette. */

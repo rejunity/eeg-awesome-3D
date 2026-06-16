@@ -74,11 +74,15 @@ class BandPowerProcessor(EEGProcessor):
             peak = comp.max()
             bands_out[name] = (comp / peak if peak > 0 else comp).astype(float).tolist()
 
-        # `features`: relative band power (fraction of total) + classic ratios.
+        # `features`: absolute band power (abs_<band>), relative band power
+        # (rel_<band>, fraction of total) + classic ratios. The absolute values
+        # feed the "absolute" electrode palette; the normalised `bands`/`rel_`
+        # feed the diverging palettes and the band pane.
         total = np.sum([p for p in power.values()], axis=0)
         total = np.maximum(total, 1e-12)
         features: dict[str, list[float]] = {}
         for name, p in power.items():
+            features[f"abs_{name}"] = p.astype(float).tolist()
             features[f"rel_{name}"] = (p / total).astype(float).tolist()
         theta = power.get("theta")
         beta = power.get("beta")
