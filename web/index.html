@@ -11,7 +11,7 @@
       #app { position: fixed; inset: 0; }
       canvas { display: block; }
       #hud {
-        position: fixed; top: 12px; left: 12px; z-index: 10;
+        position: fixed; bottom: 38px; left: 12px; z-index: 10;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         font-size: 12px; color: #cdd6f4; pointer-events: none;
         background: rgba(10,14,24,0.55); padding: 8px 10px; border-radius: 6px;
@@ -30,7 +30,7 @@
   <body>
     <div id="app"></div>
     <div id="hud"><span class="dot"></span><span id="status">connecting…</span><div id="meta"></div></div>
-    <div id="help">Space: indicators · Z: trace · X: raw trace · C: FFT · 1–7: presets · ↑/↓: head cutaway</div>
+    <div id="help">Space: cycle panel · Z trace · X power · R raw · C FFT · V features · ↑/↓ cutaway · 1–7 presets</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

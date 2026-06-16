@@ -598,6 +598,21 @@ export class App {
     this.setDisplay(this.displayMode === mode ? "none" : mode);
   }
 
+  /** Cycle the top display panel through all modes (Space key). */
+  cycleDisplay(): void {
+    const order: DisplayMode[] = [
+      "none",
+      "trace",
+      "power",
+      "rawtrace",
+      "bands",
+      "fft",
+      "features",
+    ];
+    const i = order.indexOf(this.displayMode);
+    this.setDisplay(order[(i + 1) % order.length]);
+  }
+
   showTrace(): void {
     this.setDisplay("trace");
   }

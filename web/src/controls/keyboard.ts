@@ -2,8 +2,8 @@ import type { App } from "../app";
 import { PRESETS } from "../scene/presets";
 
 /**
- * Keyboard controls mirroring Unity's Controls.cs:
- *   Space : toggle electrode indicators
+ * Keyboard controls:
+ *   Space : cycle the top display panel (off/trace/power/raw/bands/fft/features)
  *   Z     : signal trace display
  *   X     : power trace display
  *   R     : raw signal trace display
@@ -19,7 +19,7 @@ export function installKeyboard(app: App): void {
     held.add(e.key);
     switch (e.key) {
       case " ":
-        app.electrodes.toggleIndicators();
+        app.cycleDisplay();
         e.preventDefault();
         break;
       case "z":
