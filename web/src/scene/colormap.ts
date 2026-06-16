@@ -20,8 +20,8 @@ export type ColorScheme = "red-green" | "blue-yellow" | "black-white";
  *   red-green / blue-yellow: diverging, black-centred (0 = running mean);
  *     brightness encodes the signed deviation.
  *   black-white (absolute): grayscale of the *absolute* magnitude (>= 0, raw,
- *     not z-scored), gamma 2.2, divided by ``sd`` (Color SD) as a reference
- *     level: brightness = value^2.2 / sd.
+ *     not z-scored), with ``sd`` (Color SD) as a reference level applied inside
+ *     the gamma: brightness = (value / sd)^2.2.
  */
 export function electrodeColor(
   value: number,
@@ -29,7 +29,7 @@ export function electrodeColor(
   sd = 1,
 ): Color {
   if (scheme === "black-white") {
-    const g = Math.min(1, Math.pow(Math.max(0, value), 2.2) / Math.max(sd, 1e-6));
+    const g = Math.min(1, Math.pow(Math.max(0, value) / Math.max(sd, 1e-6), 2.2));
     return new Color(g, g, g);
   }
   const v = Math.min(1, Math.max(-1, value));
