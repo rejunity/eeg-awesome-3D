@@ -240,18 +240,6 @@ export function installGUI(app: App): GUI {
     .name("FFT source")
     .onChange((v: string) => app.setFftSource(v));
 
-  // Feature-extractor recompute cadence (throttles bands/features, not the trace).
-  const adv = gui.addFolder("Extractor cadence");
-  adv
-    .add(state, "bandRunMode", ["realtime", "frequency", "per-sample"])
-    .name("Run mode")
-    .onChange((m: string) => app.setBandRun(m, state.bandRunHz));
-  adv
-    .add(state, "bandRunHz", 1, 60, 1)
-    .name("Run Hz (freq)")
-    .onChange((hz: number) => app.setBandRun(state.bandRunMode, hz));
-  adv.close();
-
   // Anatomy: tune the brain fit and electrode-array pitch at runtime.
   const anatomy = gui.addFolder("Anatomy");
   anatomy
@@ -286,6 +274,18 @@ export function installGUI(app: App): GUI {
     .add(state, "headLitByElectrodes")
     .name("Head lit by electrodes")
     .onChange((v: boolean) => app.setHeadLitByElectrodes(v));
+
+  // Feature-extractor recompute cadence (throttles bands/features, not the trace).
+  const adv = gui.addFolder("Extractor cadence");
+  adv
+    .add(state, "bandRunMode", ["realtime", "frequency", "per-sample"])
+    .name("Run mode")
+    .onChange((m: string) => app.setBandRun(m, state.bandRunHz));
+  adv
+    .add(state, "bandRunHz", 1, 60, 1)
+    .name("Run Hz (freq)")
+    .onChange((hz: number) => app.setBandRun(state.bandRunMode, hz));
+  adv.close();
 
   // Debug (kept at the very bottom): synthetic mains-hum injection so the notch
   // (and CAR) are demonstrable out of the box, plus the debug-electrode probe.

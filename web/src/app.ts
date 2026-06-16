@@ -118,7 +118,7 @@ export class App {
   private mains = { ...this.mainsDefaults };
   // What the 3D electrodes colour by: "signal" (filtered sample) or a band /
   // feature key looked up in the frame's bands/features maps.
-  readonly electrodeSourceDefault = "signal";
+  readonly electrodeSourceDefault = "power";
   private electrodeSource = this.electrodeSourceDefault;
   private electrodeStats = new RunningStats();
 
