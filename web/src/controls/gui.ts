@@ -199,7 +199,8 @@ export function installGUI(app: App): GUI {
     .add(state, "colorScheme", {
       "red-green": "red-green",
       "blue-yellow": "blue-yellow",
-      "black & white (absolute)": "black-white",
+      "black-white (absolute)": "black-white",
+      "black-yellow (absolute)": "black-yellow",
     })
     .name("Color scheme")
     .onChange((v: string) => app.setColorScheme(v));

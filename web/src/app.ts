@@ -577,10 +577,11 @@ export class App {
   private _electrodeValues(
     clampZ: (s: RunningStats, ch: string, x: number) => number,
   ): number[] | null {
-    // The "absolute" (black-white) palette routes raw magnitudes (scaled by a
-    // running global level so it's unit-agnostic); the diverging palettes route
-    // the per-channel running z-score.
-    const abs = this.colorScheme === "black-white";
+    // The "absolute" palettes (black-white / black-yellow) route raw magnitudes
+    // (scaled by a running global level so it's unit-agnostic); the diverging
+    // palettes route the per-channel running z-score.
+    const abs =
+      this.colorScheme === "black-white" || this.colorScheme === "black-yellow";
 
     if (this.electrodeSource === "signal") {
       const row = this.lastFilteredRow;
