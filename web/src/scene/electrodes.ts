@@ -63,7 +63,6 @@ export class Electrodes {
   private indicatorsVisible = true;
   private debugElectrode: string | null = null;
   private colorScheme: ColorScheme = "blue-yellow";
-  private colorSD = 2.5; // brightness gain for the black-white palette
   private shape: ElectrodeShape = "sphere";
 
   private readonly sphereGeo = new SphereGeometry(0.04, 16, 12);
@@ -116,11 +115,6 @@ export class Electrodes {
 
   setColorScheme(scheme: ColorScheme): void {
     this.colorScheme = scheme;
-  }
-
-  /** Color SD: brightness gain for the black-white (absolute) palette. */
-  setColorSD(sd: number): void {
-    this.colorSD = sd;
   }
 
   /** Show/hide the floating electrode-name labels. */
@@ -228,7 +222,7 @@ export class Electrodes {
 
       const color = isolated
         ? BLACK
-        : electrodeColor(normalized[i] ?? 0, this.colorScheme, this.colorSD);
+        : electrodeColor(normalized[i] ?? 0, this.colorScheme);
       node.material.emissive.copy(color);
       node.material.emissiveIntensity = 1.0;
       node.light.color.copy(color);

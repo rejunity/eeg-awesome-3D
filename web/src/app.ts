@@ -289,7 +289,6 @@ export class App {
     const data: ElectrodeResponse = await res.json();
     this.electrodes = new Electrodes(data.electrodes);
     this.electrodes.setShape(this.electrodeShape);
-    this.electrodes.setColorSD(this.colorSD);
     this.setHeadLitByElectrodes(this.electrodeDefaults.headLit);
     this.ctx.scene.add(this.electrodes.group);
     // Project electrodes onto the head surface once the head model is ready,
@@ -618,23 +617,29 @@ export class App {
       : vals.map((v, i) => clampZ(this.electrodeStats, this.channels[i], v));
   }
 
-  /** Divide absolute magnitudes by a running global scale (EMA of the
-   *  cross-channel mean), so a typical channel is ~1 regardless of units. */
+  /** Divide absolute magnitudes by a running global scale = EMA(cross-channel
+   *  std) x Color SD, so a typical channel is ~1 regardless of units and Color
+   *  SD is the reference level (higher = dimmer). */
   private _scaleAbsolute(mags: number[]): number[] {
     let sum = 0;
+    let sumSq = 0;
     let count = 0;
     for (const m of mags) {
       if (Number.isFinite(m)) {
         sum += m;
+        sumSq += m * m;
         count++;
       }
     }
-    const mean = count ? sum / count : 0;
-    if (mean > 0) {
-      this.absScale = this.absScale == null ? mean : 0.95 * this.absScale + 0.05 * mean;
+    if (count) {
+      const mean = sum / count;
+      const std = Math.sqrt(Math.max(0, sumSq / count - mean * mean));
+      if (std > 0) {
+        this.absScale = this.absScale == null ? std : 0.95 * this.absScale + 0.05 * std;
+      }
     }
-    const s = this.absScale && this.absScale > 0 ? this.absScale : 1;
-    return mags.map((v) => v / s);
+    const scale = (this.absScale && this.absScale > 0 ? this.absScale : 1) * (this.colorSD || 1);
+    return mags.map((v) => v / scale);
   }
 
   /** Electrode colour palette. */
@@ -644,10 +649,10 @@ export class App {
     this.electrodes?.setColorScheme(scheme as any);
   }
 
-  /** Color SD: a ±σ span for the diverging palettes, brightness gain for B&W. */
+  /** Color SD: a ±σ span for the diverging palettes; for B&W it scales the
+   *  absolute reference level (cross-channel std x Color SD). */
   setColorSD(sd: number): void {
     this.colorSD = sd;
-    this.electrodes?.setColorSD(sd);
   }
 
   private setStatusText(text: string, connected: boolean): void {
