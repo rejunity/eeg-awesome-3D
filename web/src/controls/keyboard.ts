@@ -1,16 +1,28 @@
 import type { App } from "../app";
-import { PRESETS } from "../scene/presets";
+
+// Bandpass band by key: ~/§/0 = none, 1..5 = delta..gamma.
+const BAND_KEYS: Record<string, string> = {
+  "`": "none",
+  "~": "none",
+  "§": "none",
+  "0": "none",
+  "1": "delta",
+  "2": "theta",
+  "3": "alpha",
+  "4": "beta",
+  "5": "gamma",
+};
 
 /**
  * Keyboard controls:
- *   Space : cycle the top display panel (off/trace/power/raw/bands/fft/features)
- *   Z     : signal trace display
- *   X     : power trace display
- *   R     : raw signal trace display
- *   C     : FFT spectrum display
- *   V     : feature heatmap display
- *   1–7   : visual presets
- *   ↑/↓   : head cutaway / transparency
+ *   Space   : cycle the top display panel (off/trace/power/raw/bands/fft/features)
+ *   Z       : signal trace display
+ *   X       : power trace display
+ *   R       : raw signal trace display
+ *   C       : FFT spectrum display
+ *   V       : feature heatmap display
+ *   ~/§/0–5 : bandpass band (none/delta/theta/alpha/beta/gamma)
+ *   ↑/↓     : head cutaway / transparency
  */
 export function installKeyboard(app: App): void {
   const held = new Set<string>();
@@ -42,11 +54,10 @@ export function installKeyboard(app: App): void {
       case "V":
         app.toggleDisplay("features"); // feature heatmap (Hjorth, entropy, …)
         break;
-      default:
-        if (e.key >= "1" && e.key <= "7") {
-          const idx = Number(e.key) - 1;
-          if (idx < PRESETS.length) app.applyPreset(idx);
-        }
+      default: {
+        const band = BAND_KEYS[e.key];
+        if (band) app.setBand(band);
+      }
     }
   });
 
