@@ -82,3 +82,35 @@ def test_asymmetry_detects_stronger_right_hemisphere():
     assert set(ap.regions) == {"frontal", "occipital"}
     fi = ap.regions.index("frontal")
     assert ap.bands["alpha"][fi] > 0.3
+
+
+def test_asymmetry_suppresses_low_power_bands():
+    md = _md(["F3", "F4"])
+    pipe = Pipeline(
+        ProcessingConfig(
+            output_hz=30, rolling_window_seconds=4.0,
+            processors=[ProcessorConfig(name="asymmetry")],
+        )
+    )
+    pipe.configure(md)
+
+    sr = 250.0
+    si = 0
+    frame = None
+    while si < int(5.0 * sr):
+        n = 12
+        t = np.arange(si, si + n) / sr
+        alpha = np.sin(2 * math.pi * 10 * t)
+        gamma = np.sin(2 * math.pi * 35 * t)
+        # Alpha clearly right-dominant (present); a tiny gamma exists only on the
+        # left (huge raw asymmetry, but negligible power -> should be suppressed).
+        f3 = 0.7 * alpha + 0.1 * gamma
+        f4 = 1.3 * alpha
+        data = np.column_stack([f3, f4]).astype(np.float32)
+        frame = pipe.process(EEGChunk(data, t, md))
+        si += n
+
+    ap = frame.asymmetry
+    fi = ap.regions.index("frontal")
+    assert ap.bands["alpha"][fi] > 0.2  # present band: real asymmetry shown
+    assert abs(ap.bands["gamma"][fi]) < 0.1  # noise-floor band: suppressed

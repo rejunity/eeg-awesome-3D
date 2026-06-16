@@ -12,6 +12,11 @@ For each band it computes per-channel band power, then:
 
 Positive = right hemisphere has more band power. Asymmetry is reference-sensitive
 — enabling the ``car`` filter (common average reference) is recommended.
+
+Because ``(R-L)/(R+L)`` is scale-free, a band with almost no power (e.g. one cut
+by the bandpass) would produce noisy, wildly swinging asymmetry. To avoid that,
+every value is confidence-weighted by how much power the band actually carries
+(its relative power vs. broadband): negligible-power bands are pulled to zero.
 """
 
 from __future__ import annotations
@@ -31,6 +36,17 @@ BANDS: dict[str, tuple[float, float]] = {
     "beta": (13.0, 30.0),
     "gamma": (30.0, 45.0),
 }
+
+# Confidence ramp on a band's *relative* power (band / broadband). Below _REL_LO
+# the band carries negligible power (e.g. it's outside the bandpass) so its
+# asymmetry is noise and is fully suppressed; above _REL_HI it's trusted fully.
+_REL_LO = 0.02
+_REL_HI = 0.10
+
+
+def _confidence(rel_power):
+    """Map relative band power -> [0, 1] confidence (numpy-broadcasting)."""
+    return np.clip((rel_power - _REL_LO) / (_REL_HI - _REL_LO), 0.0, 1.0)
 
 
 class AsymmetryProcessor(EEGProcessor):
@@ -68,33 +84,58 @@ class AsymmetryProcessor(EEGProcessor):
         psd = (np.abs(spectrum) ** 2) / n  # (bins, n_eeg)
         freqs = np.fft.rfftfreq(n, d=1.0 / sr)
 
-        features: dict[str, list[float]] = {}
-        region_bands: dict[str, list[float]] = {}
+        # Per-channel band power, and the per-channel broadband total used to
+        # gauge how much power each band actually carries.
+        power: dict[str, np.ndarray] = {}
         for name, (lo, hi) in BANDS.items():
             mask = (freqs >= lo) & (freqs < hi)
-            power = psd[mask, :].mean(axis=0) if mask.any() else np.zeros(n_ch)
+            power[name] = psd[mask, :].mean(axis=0) if mask.any() else np.zeros(n_ch)
+        total = np.maximum(np.sum(list(power.values()), axis=0), 1e-20)  # (n_eeg,)
 
-            # Per-channel: signed asymmetry vs the homologous electrode.
+        # Per-lobe band power + lobe broadband total (for regional confidence).
+        lobe_power = {
+            lb: {nm: self._lobe_power(power[nm], lb) for nm in BANDS}
+            for lb in self._regions
+        }
+        lobe_total = {
+            lb: max(sum(lobe_power[lb].values()), 1e-20) for lb in self._regions
+        }
+
+        m = self._mirror
+        paired = m >= 0
+        features: dict[str, list[float]] = {}
+        region_bands: dict[str, list[float]] = {}
+        for name in BANDS:
+            p = power[name]
+
+            # Per-channel signed asymmetry vs the homologous electrode, then
+            # CONFIDENCE-WEIGHTED by how much power this band carries on that
+            # channel — so out-of-band / noise-floor bands don't sway at all.
             asym = np.zeros(n_ch)
-            m = self._mirror
-            paired = m >= 0
-            pj = power[paired]
-            pm = power[m[paired]]
-            denom = pj + pm
+            denom = p[paired] + p[m[paired]]
             asym[paired] = np.divide(
-                pj - pm, denom, out=np.zeros_like(denom), where=denom > 0
+                p[paired] - p[m[paired]], denom,
+                out=np.zeros_like(denom), where=denom > 0,
             )
+            asym *= _confidence(p / total)
             features[f"asym_{name}"] = asym.astype(float).tolist()
 
-            # Per-lobe regional asymmetry (right vs left mean power).
-            region_bands[name] = [
-                self._region_asym(power, lb) for lb in self._regions
-            ]
+            # Per-lobe regional asymmetry, weighted by the lobe's band confidence.
+            vals = []
+            for lb in self._regions:
+                raw = self._region_asym(p, lb)
+                conf = _confidence(lobe_power[lb][name] / lobe_total[lb])
+                vals.append(raw * conf)
+            region_bands[name] = vals
 
         return {
             "features": features,
             "asymmetry": {"regions": list(self._regions), "bands": region_bands},
         }
+
+    def _lobe_power(self, power: np.ndarray, lobe: str) -> float:
+        idx = self._groups[lobe]["L"] + self._groups[lobe]["R"]
+        return float(power[idx].mean()) if idx else 0.0
 
     def _region_asym(self, power: np.ndarray, lobe: str) -> float:
         left = power[self._groups[lobe]["L"]].mean()
