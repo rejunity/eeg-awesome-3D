@@ -28,6 +28,12 @@ const ELECTRODE_SOURCES: Record<string, string> = {
   aperiodic_slope: "aperiodic_slope",
   env_alpha: "env_alpha",
   env_beta: "env_beta",
+  // Signed L/R asymmetry per band (diverging tint; positive = right stronger).
+  asym_delta: "asym_delta",
+  asym_theta: "asym_theta",
+  asym_alpha: "asym_alpha",
+  asym_beta: "asym_beta",
+  asym_gamma: "asym_gamma",
 };
 
 // A custom bandpass-edge control: an EXPONENTIAL (log) slider over 1..120 Hz —

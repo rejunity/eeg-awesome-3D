@@ -24,6 +24,12 @@ export interface FFTBlock {
   values: number[][]; // [channel][bin]
 }
 
+export interface AsymmetryBlock {
+  regions: string[];
+  // bands[band][region] in [-1,1]; positive = right hemisphere stronger.
+  bands: Record<string, number[]>;
+}
+
 export interface QualityInfo {
   samples_received: number;
   dropped_chunks: number;
@@ -48,6 +54,7 @@ export interface EEGFramePayload {
   // Generic per-channel scalar features keyed by name: features[name][channel].
   features: Record<string, number[]>;
   fft: FFTBlock | null;
+  asymmetry: AsymmetryBlock | null;
   short_fourier: Record<string, number[]> | null;
   quality: QualityInfo;
 }

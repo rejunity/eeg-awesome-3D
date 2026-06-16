@@ -16,6 +16,7 @@ import numpy as np
 
 from ..config import ProcessingConfig
 from ..models import (
+    AsymmetryPayload,
     EEGChunk,
     EEGFramePayload,
     FFTPayload,
@@ -279,6 +280,8 @@ class Pipeline:
         normalized = outputs.get("normalized", [])
         bands = outputs.get("bands", {})
         features = outputs.get("features", {})
+        asym = outputs.get("asymmetry")
+        asym_payload = AsymmetryPayload(**asym) if asym else None
         short_fourier = outputs.get("short_fourier")
 
         fft_block = outputs.get("fft")
@@ -306,6 +309,7 @@ class Pipeline:
             normalized=normalized,
             bands=bands,
             features=features,
+            asymmetry=asym_payload,
             fft=fft_payload,
             short_fourier=short_fourier,
             quality=QualityPayload(

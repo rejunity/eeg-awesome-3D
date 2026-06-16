@@ -52,6 +52,7 @@ processing:
     - {name: line_length}
     - {name: spectral_entropy}
     - {name: aperiodic}         # 1/f slope + offset
+    - {name: asymmetry}         # per-channel + per-lobe L/R asymmetry
     - {name: fft}               # 128-bin spectrum (input: filtered by default)
     # - {name: short_fourier}   # Unity visual-parity oscillators
     # - {name: normalization}   # moving min/max or z-score `normalized`

@@ -128,6 +128,13 @@ class FFTPayload(BaseModel):
     values: list[list[float]]
 
 
+class AsymmetryPayload(BaseModel):
+    # Per-lobe hemispheric asymmetry: bands[band][region] in [-1, 1]
+    # (positive = right hemisphere has more power). regions indexes the rows.
+    regions: list[str]
+    bands: dict[str, list[float]]
+
+
 class EEGFramePayload(BaseModel):
     type: str = "eeg_frame"
     schema_version: int = SCHEMA_VERSION
@@ -155,6 +162,9 @@ class EEGFramePayload(BaseModel):
     # features[name][channel] -> value. Extensible without changing the contract.
     features: dict[str, list[float]] = Field(default_factory=dict)
     fft: FFTPayload | None = None
+    # Per-lobe hemispheric asymmetry (region x band), when the asymmetry
+    # processor is enabled.
+    asymmetry: AsymmetryPayload | None = None
     # Short-Fourier visual parity output: per-channel energy for the 3 oscillators.
     short_fourier: dict[str, list[float]] | None = None
     quality: QualityPayload = Field(default_factory=QualityPayload)

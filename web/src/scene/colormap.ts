@@ -51,6 +51,13 @@ const HEAT_STOPS: Array<[number, [number, number, number]]> = [
   [1.0, [1.0, 0.98, 0.78]], // pale yellow
 ];
 
+/** Diverging colour for a signed value in [-1, 1]: positive -> warm (right),
+ *  negative -> cool (left), 0 -> black; |value| sets brightness. */
+export function diverging(value: number): Color {
+  const x = Math.min(1, Math.max(-1, value));
+  return x >= 0 ? new Color(x, 0.25 * x, 0) : new Color(0, 0.25 * -x, -x);
+}
+
 /** Map a [0,1] energy to a black-based heat colour for band/FFT panels. */
 export function heat(value: number): Color {
   const v = Math.min(1, Math.max(0, value));

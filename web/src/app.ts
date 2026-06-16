@@ -21,7 +21,8 @@ export type DisplayMode =
   | "rawtrace"
   | "bands"
   | "fft"
-  | "features";
+  | "features"
+  | "asymmetry";
 
 // Fraction of screen height the 2D panel occupies at the top.
 const PANEL_FRACTION = 0.25;
@@ -248,6 +249,7 @@ export class App {
       ["bands", "bands"],
       ["fft", "fft"],
       ["features", "features"],
+      ["asymmetry", "asymmetry"],
     ];
     for (const [val, label] of opts) {
       const o = document.createElement("option");
@@ -536,7 +538,8 @@ export class App {
     if (
       (this.displayMode === "bands" ||
         this.displayMode === "fft" ||
-        this.displayMode === "features") &&
+        this.displayMode === "features" ||
+        this.displayMode === "asymmetry") &&
       this.latestFrame
     ) {
       this.bands.update(this.latestFrame);
@@ -559,6 +562,13 @@ export class App {
     }
     const f = this.latestFrame;
     if (!f) return null;
+    // Asymmetry features are already signed in [-1,1]; show them directly
+    // (diverging L/R) with a gain, not z-scored over time.
+    if (this.electrodeSource.startsWith("asym_")) {
+      const vals = f.features[this.electrodeSource];
+      if (!vals || !vals.length) return null;
+      return vals.map((v) => Math.max(-1, Math.min(1, v * 4)));
+    }
     const vals = f.features[this.electrodeSource] ?? f.bands[this.electrodeSource];
     if (!vals || !vals.length) return null;
     return vals.map((v, i) => clampZ(this.electrodeStats, this.channels[i], v));
@@ -590,9 +600,13 @@ export class App {
       this.displayOverlay.style.display = "none";
       return;
     }
-    const matrix = mode === "bands" || mode === "fft" || mode === "features";
+    const matrix =
+      mode === "bands" ||
+      mode === "fft" ||
+      mode === "features" ||
+      mode === "asymmetry";
     if (matrix) {
-      this.bands.setMode(mode as "bands" | "fft" | "features");
+      this.bands.setMode(mode as "bands" | "fft" | "features" | "asymmetry");
       if (this.latestFrame) this.bands.update(this.latestFrame);
     }
     this.trace.domElement.style.display = mode === "trace" ? "block" : "none";
@@ -617,6 +631,7 @@ export class App {
       "bands",
       "fft",
       "features",
+      "asymmetry",
     ];
     const i = order.indexOf(this.displayMode);
     const n = order.length;

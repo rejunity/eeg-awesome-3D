@@ -1,5 +1,5 @@
 import { CanvasTexture, LinearFilter, NearestFilter } from "three";
-import { heat } from "./colormap";
+import { diverging, heat } from "./colormap";
 import type { EEGFramePayload } from "../net/protocol";
 
 /**
@@ -13,7 +13,7 @@ import type { EEGFramePayload } from "../net/protocol";
  * Channel names live in a fixed left gutter (never drawn over the heatmap), and
  * the canvas is resized to the pane's pixel size so text isn't stretched.
  */
-export type BandMode = "bands" | "fft" | "features";
+export type BandMode = "bands" | "fft" | "features" | "asymmetry";
 
 const BAND_ORDER = ["delta", "theta", "alpha", "beta", "gamma"];
 const GUTTER = 54; // left column reserved for channel names (px)
@@ -74,6 +74,7 @@ export class BandTexture {
   update(frame: EEGFramePayload): void {
     if (this.mode === "fft" && frame.fft) this.drawFFT(frame);
     else if (this.mode === "features") this.drawFeatures(frame);
+    else if (this.mode === "asymmetry") this.drawAsymmetry(frame);
     else this.drawBands(frame);
     this.texture.needsUpdate = true;
   }
@@ -164,6 +165,39 @@ export class BandTexture {
     });
     this.drawRotatedColLabels(keys, cellW);
     this.drawRowLabels(frame.channels, cellH);
+  }
+
+  private drawAsymmetry(frame: EEGFramePayload): void {
+    const { width, height } = this.canvas;
+    const ctx = this.ctx;
+    this.clear();
+    const asym = frame.asymmetry;
+    if (!asym || asym.regions.length === 0) {
+      ctx.fillStyle = "#cdd6f4";
+      ctx.font = LABEL_FONT;
+      ctx.fillText("no asymmetry — enable the asymmetry processor", GUTTER + 4, 16);
+      return;
+    }
+    const regions = asym.regions; // rows
+    const cellH = height / regions.length;
+    const cellW = (width - GUTTER) / BAND_ORDER.length;
+
+    // Scale magnitude to the panel max for contrast (sign preserved).
+    let maxAbs = 1e-6;
+    for (const b of BAND_ORDER) {
+      for (const v of asym.bands[b] ?? []) maxAbs = Math.max(maxAbs, Math.abs(v));
+    }
+
+    for (let c = 0; c < BAND_ORDER.length; c++) {
+      const vals = asym.bands[BAND_ORDER[c]] ?? [];
+      for (let r = 0; r < regions.length; r++) {
+        const v = (vals[r] ?? 0) / maxAbs;
+        ctx.fillStyle = `#${diverging(v).getHexString()}`;
+        ctx.fillRect(GUTTER + c * cellW, r * cellH, cellW - 1, cellH - 1);
+      }
+    }
+    this.drawColLabels(BAND_ORDER, cellW);
+    this.drawRowLabels(regions, cellH);
   }
 
   private drawColLabels(cols: string[], cellW: number): void {

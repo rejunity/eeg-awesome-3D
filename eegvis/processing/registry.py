@@ -8,6 +8,7 @@ line here; the receiver and WebSocket code never change.
 from __future__ import annotations
 
 from .aperiodic import AperiodicProcessor
+from .asymmetry import AsymmetryProcessor
 from .band_envelope import BandEnvelopeProcessor
 from .band_power import BandPowerProcessor
 from .base import EEGProcessor
@@ -36,6 +37,7 @@ PROCESSORS: dict[str, type[EEGProcessor]] = {
     "line_length": LineLengthProcessor,
     "spectral_entropy": SpectralEntropyProcessor,
     "aperiodic": AperiodicProcessor,
+    "asymmetry": AsymmetryProcessor,
     "short_fourier": ShortFourierVisualProcessor,
 }
 
