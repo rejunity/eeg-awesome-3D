@@ -167,7 +167,6 @@ export function installGUI(app: App): GUI {
     notchOn: app.filterDefaults.notchOn,
     notchHz: app.filterDefaults.notchHz,
     fftSource: app.filterDefaults.fftSource,
-    fftContrast: 0.7,
     electrodeSource: app.electrodeSourceDefault,
     mainsHum: app.mainsDefaults.on,
     mainsHz: app.mainsDefaults.hz,
@@ -240,10 +239,6 @@ export function installGUI(app: App): GUI {
     .add(state, "fftSource", ["filtered", "raw"])
     .name("FFT source")
     .onChange((v: string) => app.setFftSource(v));
-  filters
-    .add(state, "fftContrast", 0, 1, 0.05)
-    .name("FFT contrast")
-    .onChange((v: number) => app.setFftContrast(v));
 
   // Feature-extractor recompute cadence (throttles bands/features, not the trace).
   const adv = gui.addFolder("Extractor cadence");
@@ -257,30 +252,12 @@ export function installGUI(app: App): GUI {
     .onChange((hz: number) => app.setBandRun(state.bandRunMode, hz));
   adv.close();
 
-  gui
+  // Anatomy: tune the brain fit and electrode-array pitch at runtime.
+  const anatomy = gui.addFolder("Anatomy");
+  anatomy
     .add(state, "headCutaway", 0, 1, 0.01)
     .name("Head cutaway")
     .onChange((v: number) => app.brainHead.setCutaway(v));
-
-  gui
-    .add(state, "indicators")
-    .name("Indicators")
-    .listen()
-    .onChange((v: boolean) => app.electrodes.setIndicatorsVisible(v));
-
-  gui
-    .add(state, "invertTrace")
-    .name("Invert trace")
-    .onChange((v: boolean) => app.trace.setInvert(v));
-
-  gui
-    .add(state, "autoRotate")
-    .name("Auto-rotate")
-    .listen()
-    .onChange((v: boolean) => app.setAutoRotate(v));
-
-  // Anatomy: tune the brain fit and electrode-array pitch at runtime.
-  const anatomy = gui.addFolder("Anatomy");
   anatomy
     .add(state, "brainScale", 0.5, 3.0, 0.01)
     .name("Brain scale")
@@ -335,6 +312,22 @@ export function installGUI(app: App): GUI {
       );
   });
   debug.close();
+
+  // Toggles at the very bottom of the panel.
+  gui
+    .add(state, "indicators")
+    .name("Indicators")
+    .listen()
+    .onChange((v: boolean) => app.electrodes.setIndicatorsVisible(v));
+  gui
+    .add(state, "invertTrace")
+    .name("Invert trace")
+    .onChange((v: boolean) => app.trace.setInvert(v));
+  gui
+    .add(state, "autoRotate")
+    .name("Auto-rotate")
+    .listen()
+    .onChange((v: boolean) => app.setAutoRotate(v));
 
   app.guiState = state;
   return gui;

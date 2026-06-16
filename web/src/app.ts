@@ -43,6 +43,8 @@ export class App {
   private displayOverlay!: HTMLDivElement;
   // The display-mode dropdown attached to the top pane (always visible).
   private displaySelect?: HTMLSelectElement;
+  // FFT-contrast control on the top pane (shown only in fft mode).
+  private fftContrastCtl?: HTMLElement;
   // The lil-gui control panel, repositioned to follow the viewport top.
   private guiPanel?: HTMLElement;
   // Separate running stats so the raw / power traces normalise independently.
@@ -189,8 +191,52 @@ export class App {
     this._buildDisplaySelect(container);
   }
 
-  /** The display-mode dropdown that lives on the top pane (always visible). */
+  /** The display-mode dropdown (always visible) + an FFT-contrast control that
+   *  appears next to it only while the FFT pane is active. Both live on the top
+   *  pane, top-right. */
   private _buildDisplaySelect(container: HTMLElement): void {
+    const wrap = document.createElement("div");
+    Object.assign(wrap.style, {
+      position: "fixed",
+      top: "6px",
+      right: "8px",
+      zIndex: "7",
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+    } as CSSStyleDeclaration);
+
+    const chrome = {
+      background: "rgba(5,7,13,0.85)",
+      color: "#cdd6f4",
+      border: "1px solid rgba(255,255,255,0.2)",
+      borderRadius: "4px",
+      font: "12px ui-monospace, monospace",
+      padding: "2px 6px",
+    };
+
+    // FFT contrast (left of the dropdown; only shown in fft mode).
+    const fc = document.createElement("div");
+    Object.assign(fc.style, {
+      ...chrome,
+      display: "none",
+      alignItems: "center",
+      gap: "6px",
+    } as CSSStyleDeclaration);
+    const lab = document.createElement("span");
+    lab.textContent = "contrast";
+    const range = document.createElement("input");
+    range.type = "range";
+    range.min = "0";
+    range.max = "1";
+    range.step = "0.05";
+    range.value = "0.7";
+    range.title = "FFT contrast";
+    range.style.width = "90px";
+    range.addEventListener("input", () => this.setFftContrast(parseFloat(range.value)));
+    fc.append(lab, range);
+    this.fftContrastCtl = fc;
+
     const sel = document.createElement("select");
     const opts: [DisplayMode, string][] = [
       ["none", "off"],
@@ -209,21 +255,12 @@ export class App {
     }
     sel.value = this.displayMode;
     sel.title = "Display panel";
-    Object.assign(sel.style, {
-      position: "fixed",
-      top: "6px",
-      right: "8px",
-      zIndex: "7",
-      background: "rgba(5,7,13,0.85)",
-      color: "#cdd6f4",
-      border: "1px solid rgba(255,255,255,0.2)",
-      borderRadius: "4px",
-      font: "12px ui-monospace, monospace",
-      padding: "2px 6px",
-    } as CSSStyleDeclaration);
+    Object.assign(sel.style, chrome as CSSStyleDeclaration);
     sel.addEventListener("change", () => this.setDisplay(sel.value as DisplayMode));
-    container.appendChild(sel);
     this.displaySelect = sel;
+
+    wrap.append(fc, sel);
+    container.appendChild(wrap);
   }
 
   async start(): Promise<void> {
@@ -535,6 +572,9 @@ export class App {
   setDisplay(mode: DisplayMode): void {
     this.displayMode = mode;
     if (this.displaySelect) this.displaySelect.value = mode;
+    if (this.fftContrastCtl) {
+      this.fftContrastCtl.style.display = mode === "fft" ? "flex" : "none";
+    }
     this._layoutGuiPanel();
 
     if (mode === "none") {
