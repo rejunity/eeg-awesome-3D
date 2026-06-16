@@ -95,6 +95,9 @@ export class App {
   // Most recent raw (un-normalised) filtered sample row, for the "signal"
   // electrode source (so its normalisation can differ from the trace's).
   private lastFilteredRow: number[] | null = null;
+  // Running global magnitude scale (EMA of the cross-channel mean) for the
+  // absolute palette, so its magnitudes are unit-agnostic.
+  private absScale: number | null = null;
   // The band selector drives the GLOBAL bandpass (none = off, custom = use the
   // low/high controls). Standard EEG band edges (Hz):
   static readonly BAND_RANGES: Record<string, [number, number]> = {
@@ -457,6 +460,7 @@ export class App {
   setElectrodeSource(source: string): void {
     this.electrodeSource = source;
     this.electrodeStats = new RunningStats(); // re-baseline; the quantity changed
+    this.absScale = null;
   }
 
   /** Set the feature-extractor recompute cadence. */
@@ -574,21 +578,22 @@ export class App {
   private _electrodeValues(
     clampZ: (s: RunningStats, ch: string, x: number) => number,
   ): number[] | null {
-    // The "absolute" (black-white) palette routes raw magnitudes; the diverging
-    // palettes route the per-channel running z-score.
+    // The "absolute" (black-white) palette routes raw magnitudes (scaled by a
+    // running global level so it's unit-agnostic); the diverging palettes route
+    // the per-channel running z-score.
     const abs = this.colorScheme === "black-white";
 
     if (this.electrodeSource === "signal") {
       const row = this.lastFilteredRow;
       if (!row) return null;
       return abs
-        ? row.map((x) => Math.abs(x))
+        ? this._scaleAbsolute(row.map((x) => Math.abs(x)))
         : row.map((x, i) => clampZ(this.filteredStats, this.channels[i], x));
     }
     if (this.electrodeSource === "power") {
       if (!this.powerEma) return null;
       return abs
-        ? this.powerEma.slice()
+        ? this._scaleAbsolute(this.powerEma.map((p) => Math.abs(p)))
         : this.powerEma.map((p, i) => clampZ(this.electrodeStats, this.channels[i], p));
     }
     const f = this.latestFrame;
@@ -599,7 +604,7 @@ export class App {
       const vals = f.features[this.electrodeSource];
       if (!vals || !vals.length) return null;
       return abs
-        ? vals.map((v) => Math.abs(v * 4))
+        ? this._scaleAbsolute(vals.map((v) => Math.abs(v * 4)))
         : vals.map((v) => Math.max(-1, Math.min(1, v * 4)));
     }
     // For band sources, prefer the absolute band power (abs_<band>) when shown
@@ -609,13 +614,33 @@ export class App {
       absVals ?? f.features[this.electrodeSource] ?? f.bands[this.electrodeSource];
     if (!vals || !vals.length) return null;
     return abs
-      ? vals.map((v) => Math.abs(v))
+      ? this._scaleAbsolute(vals.map((v) => Math.abs(v)))
       : vals.map((v, i) => clampZ(this.electrodeStats, this.channels[i], v));
+  }
+
+  /** Divide absolute magnitudes by a running global scale (EMA of the
+   *  cross-channel mean), so a typical channel is ~1 regardless of units. */
+  private _scaleAbsolute(mags: number[]): number[] {
+    let sum = 0;
+    let count = 0;
+    for (const m of mags) {
+      if (Number.isFinite(m)) {
+        sum += m;
+        count++;
+      }
+    }
+    const mean = count ? sum / count : 0;
+    if (mean > 0) {
+      this.absScale = this.absScale == null ? mean : 0.95 * this.absScale + 0.05 * mean;
+    }
+    const s = this.absScale && this.absScale > 0 ? this.absScale : 1;
+    return mags.map((v) => v / s);
   }
 
   /** Electrode colour palette. */
   setColorScheme(scheme: string): void {
     this.colorScheme = scheme;
+    this.absScale = null; // re-baseline the absolute scale for the new palette
     this.electrodes?.setColorScheme(scheme as any);
   }
 
