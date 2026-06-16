@@ -607,8 +607,8 @@ export class App {
     this.setDisplay(this.displayMode === mode ? "none" : mode);
   }
 
-  /** Cycle the top display panel through all modes (Space key). */
-  cycleDisplay(): void {
+  /** Cycle the top display panel through all modes (Tab; dir -1 = Shift+Tab). */
+  cycleDisplay(dir = 1): void {
     const order: DisplayMode[] = [
       "none",
       "trace",
@@ -619,7 +619,8 @@ export class App {
       "features",
     ];
     const i = order.indexOf(this.displayMode);
-    this.setDisplay(order[(i + 1) % order.length]);
+    const n = order.length;
+    this.setDisplay(order[(i + dir + n) % n]);
   }
 
   showTrace(): void {
