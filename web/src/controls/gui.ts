@@ -1,7 +1,7 @@
 import GUI from "lil-gui";
 import type { App } from "../app";
 import { BrainHead } from "../scene/brainHead";
-import type { ElectrodeShape } from "../scene/electrodes";
+import { DEFAULT_LABEL_SCALE, type ElectrodeShape } from "../scene/electrodes";
 import type { ColorScheme } from "../scene/colormap";
 
 const BANDS = ["none", "delta", "theta", "alpha", "beta", "gamma", "custom"];
@@ -184,7 +184,7 @@ export function installGUI(app: App): GUI {
     electrodePitch: app.electrodeDefaults.pitch * DEG,
     electrodeHeight: app.electrodeDefaults.height,
     electrodeDistance: app.electrodeDefaults.distance,
-    labelScale: 1,
+    labelScale: DEFAULT_LABEL_SCALE,
     electrodeShape: app.electrodeDefaults.shape,
     headLitByElectrodes: app.electrodeDefaults.headLit,
   };
