@@ -15,7 +15,7 @@ const BAND_KEYS: Record<string, string> = {
 
 /**
  * Keyboard controls:
- *   Space   : cycle the top display panel (off/trace/power/raw/bands/fft/features)
+ *   Tab     : cycle the top display panel (off/trace/power/raw/bands/fft/features)
  *   Z       : signal trace display
  *   X       : power trace display
  *   R       : raw signal trace display
@@ -30,7 +30,7 @@ export function installKeyboard(app: App): void {
   window.addEventListener("keydown", (e) => {
     held.add(e.key);
     switch (e.key) {
-      case " ":
+      case "Tab":
         app.cycleDisplay();
         e.preventDefault();
         break;
