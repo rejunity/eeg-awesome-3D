@@ -587,13 +587,13 @@ export class App {
       const row = this.lastFilteredRow;
       if (!row) return null;
       return abs
-        ? this._scaleAbsolute(row.map((x) => Math.abs(x)))
+        ? this._scaleAbsolute(row)
         : row.map((x, i) => clampZ(this.filteredStats, this.channels[i], x));
     }
     if (this.electrodeSource === "power") {
       if (!this.powerEma) return null;
       return abs
-        ? this._scaleAbsolute(this.powerEma.map((p) => Math.abs(p)))
+        ? this._scaleAbsolute(this.powerEma)
         : this.powerEma.map((p, i) => clampZ(this.electrodeStats, this.channels[i], p));
     }
     const f = this.latestFrame;
@@ -604,7 +604,7 @@ export class App {
       const vals = f.features[this.electrodeSource];
       if (!vals || !vals.length) return null;
       return abs
-        ? this._scaleAbsolute(vals.map((v) => Math.abs(v * 4)))
+        ? this._scaleAbsolute(vals.map((v) => v * 4))
         : vals.map((v) => Math.max(-1, Math.min(1, v * 4)));
     }
     // For band sources, prefer the absolute band power (abs_<band>) when shown
@@ -614,18 +614,18 @@ export class App {
       absVals ?? f.features[this.electrodeSource] ?? f.bands[this.electrodeSource];
     if (!vals || !vals.length) return null;
     return abs
-      ? this._scaleAbsolute(vals.map((v) => Math.abs(v)))
+      ? this._scaleAbsolute(vals)
       : vals.map((v, i) => clampZ(this.electrodeStats, this.channels[i], v));
   }
 
-  /** Divide absolute magnitudes by a running global scale = EMA(cross-channel
-   *  std) x Color SD, so a typical channel is ~1 regardless of units and Color
-   *  SD is the reference level (higher = dimmer). */
-  private _scaleAbsolute(mags: number[]): number[] {
+  /** Divide (signed) values by a running global scale = EMA(cross-channel std)
+   *  x Color SD, so a typical channel is ~1 regardless of units and Color SD is
+   *  the reference level. The caller (electrodeColor) takes |.| before clamping. */
+  private _scaleAbsolute(vals: number[]): number[] {
     let sum = 0;
     let sumSq = 0;
     let count = 0;
-    for (const m of mags) {
+    for (const m of vals) {
       if (Number.isFinite(m)) {
         sum += m;
         sumSq += m * m;
@@ -640,7 +640,7 @@ export class App {
       }
     }
     const scale = (this.absScale && this.absScale > 0 ? this.absScale : 1) * (this.colorSD || 1);
-    return mags.map((v) => v / scale);
+    return vals.map((v) => v / scale);
   }
 
   /** Electrode colour palette. */

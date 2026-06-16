@@ -23,17 +23,16 @@ export type ColorScheme =
  * Electrode colour for a value in [-1, 1].
  *   red-green / blue-yellow: diverging, black-centred (0 = running mean);
  *     brightness encodes the signed deviation.
- *   black-white / black-yellow (absolute): brightness from the *absolute*
- *     magnitude (>= 0), which the caller has already divided by its reference
- *     scale (cross-channel std x Color SD); brightness = value^2.2, rendered
- *     grayscale or yellow.
+ *   black-white / black-yellow (absolute): brightness from |value| (value =
+ *     the signed source already divided by its reference scale, cross-channel
+ *     std x Color SD); brightness = |value|^2.2, rendered grayscale or yellow.
  */
 export function electrodeColor(
   value: number,
   scheme: ColorScheme = "red-green",
 ): Color {
   if (scheme === "black-white" || scheme === "black-yellow") {
-    const g = Math.min(1, Math.pow(Math.max(0, value), 2.2));
+    const g = Math.min(1, Math.pow(Math.abs(value), 2.2));
     return scheme === "black-yellow" ? new Color(g, g, 0) : new Color(g, g, g);
   }
   const v = Math.min(1, Math.max(-1, value));
