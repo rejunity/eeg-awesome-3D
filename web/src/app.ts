@@ -47,6 +47,8 @@ export class App {
   private fftContrastCtl?: HTMLElement;
   // The lil-gui control panel, repositioned to follow the viewport top.
   private guiPanel?: HTMLElement;
+  // Set by the GUI so the Low/High sliders follow programmatic bandpass changes.
+  private bandpassSliderSync?: () => void;
   // Separate running stats so the raw / power traces normalise independently.
   private rawStats = new RunningStats();
   private powerTraceStats = new RunningStats();
@@ -355,6 +357,13 @@ export class App {
       this.electrodeStats = new RunningStats();
     }
     this._sendBandpass();
+    this.bandpassSliderSync?.(); // keep the GUI Low/High sliders in step
+  }
+
+  /** Register a callback so the GUI Low/High sliders follow programmatic
+   *  bandpass changes (e.g. band keys / the band dropdown). */
+  setBandpassSliderSync(fn: () => void): void {
+    this.bandpassSliderSync = fn;
   }
 
   /** Enable/retune the global notch filter. */

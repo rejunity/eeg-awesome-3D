@@ -215,12 +215,7 @@ export function installGUI(app: App): GUI {
     .add(state, "band", BANDS)
     .name("Bandpass band")
     .listen()
-    .onChange((b: string) => {
-      app.setBand(b);
-      const [lo, hi] = app.bandpassRange;
-      lowSlider.setHz(lo);
-      highSlider.setHz(hi);
-    });
+    .onChange((b: string) => app.setBand(b));
   // Bandpass edges: exponential sliders (more resolution at low Hz) with an
   // editable Hz box; styled to match the other lil-gui sliders.
   const lowSlider = logHzSlider(filters, app.filterDefaults.bandpassLow, "Low", (hz) =>
@@ -229,6 +224,13 @@ export function installGUI(app: App): GUI {
   const highSlider = logHzSlider(filters, app.filterDefaults.bandpassHigh, "High", (hz) =>
     app.setBandpassRange(lowSlider.hz(), hz),
   );
+  // Keep the Low/High sliders in sync when the band changes from anywhere
+  // (band dropdown, ~/0–5 keys, presets).
+  app.setBandpassSliderSync(() => {
+    const [lo, hi] = app.bandpassRange;
+    lowSlider.setHz(lo);
+    highSlider.setHz(hi);
+  });
   filters
     .add(state, "notchOn")
     .name("Notch on")
