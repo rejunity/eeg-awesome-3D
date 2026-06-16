@@ -118,6 +118,12 @@ export class Electrodes {
     for (const n of this.nodes.values()) n.label.visible = v;
   }
 
+  /** Scale the floating electrode-name labels (1 = default size, 2:1 aspect). */
+  setLabelScale(scale: number): void {
+    const s = Math.max(0.05, scale);
+    for (const n of this.nodes.values()) n.label.scale.set(0.18 * s, 0.09 * s, 1);
+  }
+
   setShape(shape: ElectrodeShape): void {
     this.shape = shape;
     const geo: BufferGeometry = shape === "cone" ? this.coneGeo : this.sphereGeo;

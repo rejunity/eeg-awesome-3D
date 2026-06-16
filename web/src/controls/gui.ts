@@ -184,6 +184,7 @@ export function installGUI(app: App): GUI {
     electrodePitch: app.electrodeDefaults.pitch * DEG,
     electrodeHeight: app.electrodeDefaults.height,
     electrodeDistance: app.electrodeDefaults.distance,
+    labelScale: 1,
     electrodeShape: app.electrodeDefaults.shape,
     headLitByElectrodes: app.electrodeDefaults.headLit,
   };
@@ -267,6 +268,10 @@ export function installGUI(app: App): GUI {
     .add(state, "electrodeDistance", 0.0, 0.4, 0.005)
     .name("Electrode distance")
     .onChange((v: number) => app.setElectrodeDistance(v));
+  anatomy
+    .add(state, "labelScale", 0.3, 3.0, 0.05)
+    .name("Label scale")
+    .onChange((v: number) => app.electrodes.setLabelScale(v));
   anatomy
     .add(state, "electrodeShape", ["sphere", "cone"])
     .name("Electrode shape")
