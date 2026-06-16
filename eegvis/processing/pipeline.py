@@ -24,7 +24,7 @@ from ..models import (
     QualityPayload,
     StreamMetadata,
 )
-from .filters import BandpassProcessor, NotchProcessor
+from .filters import BandpassProcessor, CARProcessor, NotchProcessor
 from .registry import create_processor
 
 # Output keys that are a per-sample stream rather than a current value: they are
@@ -51,12 +51,14 @@ def _merge_outputs(dst: dict, out: dict) -> None:
 class Pipeline:
     def __init__(self, config: ProcessingConfig):
         self.config = config
-        # Built-in global filter front-end (always present, runtime-controllable,
-        # off by default). notch -> bandpass, then any extra configured filters
-        # (e.g. car). The chain runs every tick and produces the filtered window.
+        # Built-in global filter front-end (always present, runtime-controllable).
+        # car -> notch -> bandpass, then any extra configured filters. The chain
+        # runs every tick and produces the filtered window. CAR defaults from
+        # config (on in the bundled default); notch/bandpass default off.
+        self.car = CARProcessor(enabled=bool(getattr(config, "car", False)))
         self.notch = NotchProcessor(enabled=False, hz=50.0)
         self.bandpass = BandpassProcessor(enabled=False, low_hz=1.0, high_hz=45.0)
-        self.filters = [self.notch, self.bandpass] + [
+        self.filters = [self.car, self.notch, self.bandpass] + [
             create_processor(p.name, p.enabled, p.options()) for p in config.filters
         ]
         # The extractor fan-out (order-independent feature extractors).
@@ -102,6 +104,10 @@ class Pipeline:
             self.bandpass.set_band(low_hz, high_hz)
         if enabled is not None:
             self.bandpass.enabled = bool(enabled)
+
+    def set_car(self, enabled: bool) -> None:
+        """Enable/disable the global common-average-reference filter."""
+        self.car.enabled = bool(enabled)
 
     def set_notch(self, enabled: bool | None = None, hz: float | None = None) -> None:
         """Enable/retune the global notch at runtime."""

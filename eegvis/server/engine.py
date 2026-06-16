@@ -261,6 +261,10 @@ class Engine:
         """Enable/retune the global bandpass that feeds the feature extractors."""
         self.pipeline.set_bandpass(enabled, low_hz, high_hz)
 
+    def set_car(self, enabled: bool) -> None:
+        """Enable/disable the global common-average-reference filter."""
+        self.pipeline.set_car(enabled)
+
     def set_notch(self, enabled: bool | None, hz: float | None) -> None:
         """Enable/retune the global notch filter."""
         self.pipeline.set_notch(enabled, hz)

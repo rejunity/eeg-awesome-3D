@@ -183,6 +183,8 @@ def _handle_client_message(engine: Engine, text: str) -> None:
         engine.set_band_run(data.get("mode"), data.get("hz"))
     elif data.get("type") == "set_bandpass":
         engine.set_bandpass(data.get("enabled"), data.get("low_hz"), data.get("high_hz"))
+    elif data.get("type") == "set_car":
+        engine.set_car(bool(data.get("enabled")))
     elif data.get("type") == "set_notch":
         engine.set_notch(data.get("enabled"), data.get("hz"))
     elif data.get("type") == "set_fft_source":

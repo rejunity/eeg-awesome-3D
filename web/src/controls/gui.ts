@@ -170,6 +170,7 @@ export function installGUI(app: App): GUI {
     bandpassOn: app.filterDefaults.bandpassOn,
     bandpassLow: app.filterDefaults.bandpassLow,
     bandpassHigh: app.filterDefaults.bandpassHigh,
+    carOn: app.filterDefaults.carOn,
     notchOn: app.filterDefaults.notchOn,
     notchHz: app.filterDefaults.notchHz,
     fftSource: app.filterDefaults.fftSource,
@@ -237,6 +238,10 @@ export function installGUI(app: App): GUI {
     lowSlider.setHz(lo);
     highSlider.setHz(hi);
   });
+  filters
+    .add(state, "carOn")
+    .name("CAR (common avg ref)")
+    .onChange((v: boolean) => app.setCar(v));
   filters
     .add(state, "notchOn")
     .name("Notch on")

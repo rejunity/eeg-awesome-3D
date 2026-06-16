@@ -108,6 +108,7 @@ export class App {
 
   // Global filter front-end (feeds the trace, electrodes AND extractors).
   readonly filterDefaults = {
+    carOn: true,
     bandpassOn: false,
     bandpassLow: 1,
     bandpassHigh: 45,
@@ -296,6 +297,7 @@ export class App {
     // Sync the band selection + run cadence to the backend on (re)connect.
     this.socket.onOpen = () => {
       this._sendBandRun();
+      this._sendCar();
       this._sendBandpass();
       this._sendNotch();
       this._sendFftSource();
@@ -315,6 +317,20 @@ export class App {
       low_hz: this.filters.bandpassLow,
       high_hz: this.filters.bandpassHigh,
     });
+  }
+
+  private _sendCar(): void {
+    this.socket.send({ type: "set_car", enabled: this.filters.carOn });
+  }
+
+  /** Enable/disable the global common-average-reference filter. */
+  setCar(on: boolean): void {
+    this.filters.carOn = on;
+    // Re-baseline the filtered/power colour stats since the signal changed.
+    this.filteredStats = new RunningStats();
+    this.powerTraceStats = new RunningStats();
+    this.powerEma = null;
+    this._sendCar();
   }
 
   private _sendNotch(): void {

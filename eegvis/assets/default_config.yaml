@@ -33,14 +33,16 @@ processing:
   #   frequency             -> run at most run_hz times per second (cheaper)
   run_mode: realtime
   run_hz: 30
+  # Common Average Reference (spatial), built-in head of the filter chain; on by
+  # default and toggled live from the GUI. Removes the cross-channel mean.
+  car: true
   # The global filter chain (signal -> signal) that produces the `filtered`
-  # window driving the trace, electrodes AND extractors. The built-in notch +
-  # bandpass front-end is always present and controlled live from the GUI
-  # ("Filters (global)"); the band selector (none/alpha/.../custom) sets the
-  # bandpass (custom low > high rejects the band). Off by default. List EXTRA
-  # filters here to append after it, e.g.:
+  # window driving the trace, electrodes AND extractors. The built-in
+  # car -> notch -> bandpass front-end is always present and controlled live from
+  # the GUI ("Filters (global)"); the band selector (none/alpha/.../custom) sets
+  # the bandpass (custom low > high rejects the band). List EXTRA filters here to
+  # append after the front-end:
   filters: []
-  #   - {name: car}             # common average reference (spatial)
   #
   # Feature extractors: pure functions of the window, an order-independent
   # fan-out that populates the band / FFT / features display panes. Each may pick
