@@ -210,7 +210,7 @@ export class App {
     Object.assign(sel.style, {
       position: "fixed",
       top: "6px",
-      left: "8px",
+      right: "8px",
       zIndex: "7",
       background: "rgba(5,7,13,0.85)",
       color: "#cdd6f4",
