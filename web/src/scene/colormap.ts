@@ -38,9 +38,34 @@ export const BAND_COLORS: Record<string, Color> = {
   gamma: new Color(0.9, 0.3, 0.3),
 };
 
-/** Map a [0,1] energy to a heat-ish colour for band/FFT panels. */
+// Inferno-like heat ramp: BLACK at 0 (so zero energy is truly black, not a
+// washed-out bias colour) rising through indigo -> magenta -> orange -> pale
+// yellow, for high contrast across the band/FFT panels.
+const HEAT_STOPS: Array<[number, [number, number, number]]> = [
+  [0.0, [0.0, 0.0, 0.0]],
+  [0.14, [0.12, 0.02, 0.25]], // deep indigo
+  [0.32, [0.42, 0.04, 0.43]], // purple
+  [0.52, [0.74, 0.14, 0.27]], // magenta-red
+  [0.72, [0.96, 0.42, 0.09]], // orange
+  [0.88, [0.99, 0.73, 0.21]], // amber
+  [1.0, [1.0, 0.98, 0.78]], // pale yellow
+];
+
+/** Map a [0,1] energy to a black-based heat colour for band/FFT panels. */
 export function heat(value: number): Color {
   const v = Math.min(1, Math.max(0, value));
-  // dark red -> orange -> white-ish, echoing the Unity FFT band colour ramp.
-  return new Color().setRGB(0.2 + 0.8 * v, 0.1 + 0.5 * v, 0.1 + 0.6 * v * v);
+  for (let i = 1; i < HEAT_STOPS.length; i++) {
+    const [t1, c1] = HEAT_STOPS[i];
+    if (v <= t1) {
+      const [t0, c0] = HEAT_STOPS[i - 1];
+      const f = t1 > t0 ? (v - t0) / (t1 - t0) : 0;
+      return new Color(
+        c0[0] + (c1[0] - c0[0]) * f,
+        c0[1] + (c1[1] - c0[1]) * f,
+        c0[2] + (c1[2] - c0[2]) * f,
+      );
+    }
+  }
+  const last = HEAT_STOPS[HEAT_STOPS.length - 1][1];
+  return new Color(last[0], last[1], last[2]);
 }

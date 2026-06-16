@@ -27,10 +27,15 @@ export class BandTexture {
   private mode: BandMode = "bands";
   // Heatmap contrast gamma: <1 expands low values (more contrast). Adjustable.
   private gamma = 0.4;
+  // Black point: normalized energy below this maps to 0 (true black), so the
+  // noise floor / out-of-band bins don't show as a constant bias colour.
+  private blackPoint = 0.04;
 
-  // Expand low values so faint spectral detail is visible.
+  // Subtract the black point, rescale, then gamma-expand the remainder.
   private contrast(v: number): number {
-    return Math.pow(Math.max(0, Math.min(1, v)), this.gamma);
+    const x = Math.max(0, Math.min(1, v));
+    if (x <= this.blackPoint) return 0;
+    return Math.pow((x - this.blackPoint) / (1 - this.blackPoint), this.gamma);
   }
 
   /** Set the heatmap contrast (amount in [0,1]; higher = more contrast). */
