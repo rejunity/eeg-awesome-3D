@@ -23,8 +23,10 @@ import { electrodeColor, type ColorScheme } from "./colormap";
 const BLACK = new Color(0x000000);
 // How far above the electrode marker (along the outward normal) the name floats.
 const LABEL_OFFSET = 0.12;
-// Default label scale (1 = base 0.18x0.09 world size); also the GUI default.
-export const DEFAULT_LABEL_SCALE = 0.7;
+// Base label world size (canvas aspect 2:1) and the default scale (GUI default).
+const LABEL_W = 0.126;
+const LABEL_H = 0.063;
+export const DEFAULT_LABEL_SCALE = 1.0;
 
 interface ElectrodeNode {
   name: string;
@@ -123,7 +125,7 @@ export class Electrodes {
   /** Scale the floating electrode-name labels (1 = default size, 2:1 aspect). */
   setLabelScale(scale: number): void {
     const s = Math.max(0.05, scale);
-    for (const n of this.nodes.values()) n.label.scale.set(0.18 * s, 0.09 * s, 1);
+    for (const n of this.nodes.values()) n.label.scale.set(LABEL_W * s, LABEL_H * s, 1);
   }
 
   setShape(shape: ElectrodeShape): void {
@@ -261,7 +263,6 @@ function makeLabelSprite(text: string): Sprite {
     depthWrite: false, // labels don't occlude each other / write depth
   });
   const sprite = new Sprite(material);
-  // world size (canvas aspect 2:1), at the default label scale
-  sprite.scale.set(0.18 * DEFAULT_LABEL_SCALE, 0.09 * DEFAULT_LABEL_SCALE, 1);
+  sprite.scale.set(LABEL_W * DEFAULT_LABEL_SCALE, LABEL_H * DEFAULT_LABEL_SCALE, 1);
   return sprite;
 }
