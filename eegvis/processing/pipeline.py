@@ -22,6 +22,7 @@ from ..models import (
     FFTPayload,
     ProcessingState,
     QualityPayload,
+    RegionPowerPayload,
     StreamMetadata,
 )
 from .filters import BandpassProcessor, CARProcessor, NotchProcessor
@@ -288,6 +289,8 @@ class Pipeline:
         features = outputs.get("features", {})
         asym = outputs.get("asymmetry")
         asym_payload = AsymmetryPayload(**asym) if asym else None
+        rpow = outputs.get("region_power")
+        rpow_payload = RegionPowerPayload(**rpow) if rpow else None
         short_fourier = outputs.get("short_fourier")
 
         fft_block = outputs.get("fft")
@@ -316,6 +319,7 @@ class Pipeline:
             bands=bands,
             features=features,
             asymmetry=asym_payload,
+            region_power=rpow_payload,
             fft=fft_payload,
             short_fourier=short_fourier,
             quality=QualityPayload(

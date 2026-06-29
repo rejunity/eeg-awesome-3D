@@ -135,6 +135,12 @@ class AsymmetryPayload(BaseModel):
     bands: dict[str, list[float]]
 
 
+class RegionPowerPayload(BaseModel):
+    # Per-lobe mean band power: bands[band][region] (>= 0). regions indexes rows.
+    regions: list[str]
+    bands: dict[str, list[float]]
+
+
 class EEGFramePayload(BaseModel):
     type: str = "eeg_frame"
     schema_version: int = SCHEMA_VERSION
@@ -165,6 +171,8 @@ class EEGFramePayload(BaseModel):
     # Per-lobe hemispheric asymmetry (region x band), when the asymmetry
     # processor is enabled.
     asymmetry: AsymmetryPayload | None = None
+    # Per-lobe band power (region x band), when the region_power processor is on.
+    region_power: RegionPowerPayload | None = None
     # Short-Fourier visual parity output: per-channel energy for the 3 oscillators.
     short_fourier: dict[str, list[float]] | None = None
     quality: QualityPayload = Field(default_factory=QualityPayload)

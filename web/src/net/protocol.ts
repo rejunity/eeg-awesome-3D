@@ -30,6 +30,12 @@ export interface AsymmetryBlock {
   bands: Record<string, number[]>;
 }
 
+export interface RegionPowerBlock {
+  regions: string[];
+  // bands[band][region] >= 0; mean band power per lobe.
+  bands: Record<string, number[]>;
+}
+
 export interface QualityInfo {
   samples_received: number;
   dropped_chunks: number;
@@ -55,6 +61,7 @@ export interface EEGFramePayload {
   features: Record<string, number[]>;
   fft: FFTBlock | null;
   asymmetry: AsymmetryBlock | null;
+  region_power: RegionPowerBlock | null;
   short_fourier: Record<string, number[]> | null;
   quality: QualityInfo;
 }

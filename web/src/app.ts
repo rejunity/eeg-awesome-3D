@@ -22,6 +22,7 @@ export type DisplayMode =
   | "bands"
   | "fft"
   | "features"
+  | "lobes"
   | "asymmetry";
 
 // Fraction of screen height the 2D panel occupies at the top.
@@ -257,6 +258,7 @@ export class App {
       ["bands", "bands"],
       ["fft", "fft"],
       ["features", "features"],
+      ["lobes", "lobes"],
       ["asymmetry", "asymmetry"],
     ];
     for (const [val, label] of opts) {
@@ -562,6 +564,7 @@ export class App {
       (this.displayMode === "bands" ||
         this.displayMode === "fft" ||
         this.displayMode === "features" ||
+        this.displayMode === "lobes" ||
         this.displayMode === "asymmetry") &&
       this.latestFrame
     ) {
@@ -669,7 +672,8 @@ export class App {
     this.displayMode = mode;
     if (this.displaySelect) this.displaySelect.value = mode;
     if (this.fftContrastCtl) {
-      this.fftContrastCtl.style.display = mode === "fft" ? "flex" : "none";
+      this.fftContrastCtl.style.display =
+        mode === "fft" || mode === "lobes" ? "flex" : "none";
     }
     this._layoutGuiPanel();
 
@@ -681,9 +685,10 @@ export class App {
       mode === "bands" ||
       mode === "fft" ||
       mode === "features" ||
+      mode === "lobes" ||
       mode === "asymmetry";
     if (matrix) {
-      this.bands.setMode(mode as "bands" | "fft" | "features" | "asymmetry");
+      this.bands.setMode(mode as "bands" | "fft" | "features" | "lobes" | "asymmetry");
       if (this.latestFrame) this.bands.update(this.latestFrame);
     }
     this.trace.domElement.style.display = mode === "trace" ? "block" : "none";
@@ -708,6 +713,7 @@ export class App {
       "bands",
       "fft",
       "features",
+      "lobes",
       "asymmetry",
     ];
     const i = order.indexOf(this.displayMode);

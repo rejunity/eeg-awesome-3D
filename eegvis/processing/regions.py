@@ -84,3 +84,13 @@ def lobe_groups(names: list[str]) -> dict[str, dict[str, list[int]]]:
         if lobe in groups and hemi in ("L", "R"):
             groups[lobe][hemi].append(i)
     return groups
+
+
+def lobe_indices(names: list[str]) -> dict[str, list[int]]:
+    """``{lobe: [idx...]}`` — all channels of each lobe (both sides + midline)."""
+    groups: dict[str, list[int]] = {lb: [] for lb in LOBES}
+    for i, n in enumerate(names):
+        lobe, _ = parse_label(n)
+        if lobe in groups:
+            groups[lobe].append(i)
+    return groups

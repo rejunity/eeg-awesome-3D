@@ -13,7 +13,7 @@ import type { EEGFramePayload } from "../net/protocol";
  * Channel names live in a fixed left gutter (never drawn over the heatmap), and
  * the canvas is resized to the pane's pixel size so text isn't stretched.
  */
-export type BandMode = "bands" | "fft" | "features" | "asymmetry";
+export type BandMode = "bands" | "fft" | "features" | "asymmetry" | "lobes";
 
 const BAND_ORDER = ["delta", "theta", "alpha", "beta", "gamma"];
 const GUTTER = 54; // left column reserved for channel names (px)
@@ -75,6 +75,7 @@ export class BandTexture {
     if (this.mode === "fft" && frame.fft) this.drawFFT(frame);
     else if (this.mode === "features") this.drawFeatures(frame);
     else if (this.mode === "asymmetry") this.drawAsymmetry(frame);
+    else if (this.mode === "lobes") this.drawLobes(frame);
     else this.drawBands(frame);
     this.texture.needsUpdate = true;
   }
@@ -165,6 +166,37 @@ export class BandTexture {
     });
     this.drawRotatedColLabels(keys, cellW);
     this.drawRowLabels(frame.channels, cellH);
+  }
+
+  private drawLobes(frame: EEGFramePayload): void {
+    const { width, height } = this.canvas;
+    const ctx = this.ctx;
+    this.clear();
+    const rp = frame.region_power;
+    if (!rp || rp.regions.length === 0) {
+      ctx.fillStyle = "#cdd6f4";
+      ctx.font = LABEL_FONT;
+      ctx.fillText("no lobe power — enable the region_power processor", GUTTER + 4, 16);
+      return;
+    }
+    const regions = rp.regions; // rows
+    const cellH = height / regions.length;
+    const cellW = (width - GUTTER) / BAND_ORDER.length;
+
+    // Normalise to the panel max, then the same heat ramp + contrast as the FFT.
+    let max = 1e-12;
+    for (const b of BAND_ORDER) {
+      for (const v of rp.bands[b] ?? []) if (v > max) max = v;
+    }
+    for (let c = 0; c < BAND_ORDER.length; c++) {
+      const vals = rp.bands[BAND_ORDER[c]] ?? [];
+      for (let r = 0; r < regions.length; r++) {
+        ctx.fillStyle = `#${heat(this.contrast((vals[r] ?? 0) / max)).getHexString()}`;
+        ctx.fillRect(GUTTER + c * cellW, r * cellH, cellW - 1, cellH - 1);
+      }
+    }
+    this.drawColLabels(BAND_ORDER, cellW);
+    this.drawRowLabels(regions, cellH);
   }
 
   private drawAsymmetry(frame: EEGFramePayload): void {

@@ -55,6 +55,7 @@ processing:
     - {name: spectral_entropy}
     - {name: aperiodic}         # 1/f slope + offset
     - {name: asymmetry}         # per-channel + per-lobe L/R asymmetry
+    - {name: region_power}      # per-lobe band power (region x band)
     - {name: fft}               # 128-bin spectrum (input: filtered by default)
     # - {name: short_fourier}   # Unity visual-parity oscillators
     # - {name: normalization}   # moving min/max or z-score `normalized`

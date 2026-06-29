@@ -17,6 +17,7 @@ from .filters import BandpassProcessor, CARProcessor, NotchProcessor
 from .hjorth import HjorthProcessor
 from .line_length import LineLengthProcessor
 from .normalization import NormalizationProcessor
+from .region_power import RegionPowerProcessor
 from .short_fourier import ShortFourierVisualProcessor
 from .smoothing import SmoothingProcessor
 from .spectral_entropy import SpectralEntropyProcessor
@@ -38,6 +39,7 @@ PROCESSORS: dict[str, type[EEGProcessor]] = {
     "spectral_entropy": SpectralEntropyProcessor,
     "aperiodic": AperiodicProcessor,
     "asymmetry": AsymmetryProcessor,
+    "region_power": RegionPowerProcessor,
     "short_fourier": ShortFourierVisualProcessor,
 }
 
