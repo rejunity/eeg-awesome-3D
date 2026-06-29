@@ -145,6 +145,7 @@ class Pipeline:
         self._pending_raw = []
         self._persistent = {}
         self._last_run_t = -1e9
+        self._last_fft = None  # drop stale FFT (old channel count) on reconfigure
         for p in self.filters + self.processors:
             p.configure(metadata)
             p.reset()

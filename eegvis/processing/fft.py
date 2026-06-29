@@ -42,6 +42,12 @@ class FFTProcessor(EEGProcessor):
 
     def configure(self, metadata: StreamMetadata) -> None:
         self._sample_rate = metadata.nominal_srate
+        self.reset()
+
+    def reset(self) -> None:
+        # frame_index restarts at 0 on (re)configure (e.g. a stream switch); clear
+        # the throttle baseline so the FFT doesn't freeze until it catches up.
+        self._last_emit_frame = -10_000
 
     def _ensure_window(self, n: int) -> np.ndarray:
         if self._window is None or self._window_n != n:
