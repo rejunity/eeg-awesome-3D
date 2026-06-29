@@ -195,31 +195,11 @@ export function installGUI(app: App): GUI {
     headLitByElectrodes: app.electrodeDefaults.headLit,
   };
 
-  gui
-    .add(state, "colorScheme", {
-      "red-green": "red-green",
-      "blue-yellow": "blue-yellow",
-      "black-white (absolute)": "black-white",
-      "black-yellow (absolute)": "black-yellow",
-    })
-    .name("Color scheme")
-    .onChange((v: string) => app.setColorScheme(v));
-
-  gui
-    .add(state, "colorSD", 0.5, 6.0, 0.1)
-    .name("Color SD (±σ)")
-    .onChange((v: number) => app.setColorSD(v));
-
-  // Electrode colouring: which per-channel quantity drives the 3D electrodes.
-  gui
-    .add(state, "electrodeSource", ELECTRODE_SOURCES)
-    .name("Electrode source")
-    .onChange((v: string) => app.setElectrodeSource(v));
-
-  // Global filter front-end. The band selector sets the bandpass to standard
-  // band edges; "custom" uses the low/high sliders (set low > high to REJECT
-  // that band). Everything downstream — trace, electrodes, features, FFT — sees
-  // the filtered signal. Flip "FFT source" to raw to compare against the input.
+  // Global filter front-end (kept at the top). The band selector sets the
+  // bandpass to standard band edges; "custom" uses the low/high sliders (set
+  // low > high to REJECT that band). Everything downstream — trace, electrodes,
+  // features, FFT — sees the filtered signal. Flip "FFT source" to raw to
+  // compare against the input.
   const filters = gui.addFolder("Filters (global)");
   // Band selector sits above the Low/High edges.
   filters
@@ -258,6 +238,27 @@ export function installGUI(app: App): GUI {
     .add(state, "fftSource", ["filtered", "raw"])
     .name("FFT source")
     .onChange((v: string) => app.setFftSource(v));
+
+  gui
+    .add(state, "colorScheme", {
+      "red-green": "red-green",
+      "blue-yellow": "blue-yellow",
+      "black-white (absolute)": "black-white",
+      "black-yellow (absolute)": "black-yellow",
+    })
+    .name("Color scheme")
+    .onChange((v: string) => app.setColorScheme(v));
+
+  gui
+    .add(state, "colorSD", 0.5, 6.0, 0.1)
+    .name("Color SD (±σ)")
+    .onChange((v: number) => app.setColorSD(v));
+
+  // Electrode colouring: which per-channel quantity drives the 3D electrodes.
+  gui
+    .add(state, "electrodeSource", ELECTRODE_SOURCES)
+    .name("Electrode source")
+    .onChange((v: string) => app.setElectrodeSource(v));
 
   // Anatomy: tune the brain fit and electrode-array pitch at runtime.
   const anatomy = gui.addFolder("Anatomy");
