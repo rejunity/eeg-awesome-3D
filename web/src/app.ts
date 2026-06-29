@@ -45,8 +45,9 @@ export class App {
   private displayOverlay!: HTMLDivElement;
   // The display-mode dropdown attached to the top pane (always visible).
   private displaySelect?: HTMLSelectElement;
-  // The LSL input-stream selector (top-left), refreshed from backend scans.
+  // The LSL input-stream selector + the recv-rate label beside it.
   private streamSelect?: HTMLSelectElement;
+  private recvLabel?: HTMLElement;
   // FFT-contrast control on the top pane (shown only in fft mode).
   private fftContrastCtl?: HTMLElement;
   // The lil-gui control panel, repositioned to follow the viewport top.
@@ -205,16 +206,23 @@ export class App {
     this._buildStreamSelect(container);
   }
 
-  /** The LSL stream selector (top-left): switch the active source live. Its
-   *  options are refreshed whenever the backend pushes the stream list. */
+  /** The LSL stream selector (bottom-left) with the live recv rate to its right.
+   *  Options are refreshed whenever the backend pushes the stream list. */
   private _buildStreamSelect(container: HTMLElement): void {
-    const sel = document.createElement("select");
-    sel.title = "Input stream";
-    Object.assign(sel.style, {
+    const wrap = document.createElement("div");
+    Object.assign(wrap.style, {
       position: "fixed",
       bottom: "34px",
       left: "12px",
       zIndex: "11",
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+    } as CSSStyleDeclaration);
+
+    const sel = document.createElement("select");
+    sel.title = "Input stream";
+    Object.assign(sel.style, {
       maxWidth: "340px",
       background: "rgba(5,7,13,0.85)",
       color: "#cdd6f4",
@@ -224,8 +232,18 @@ export class App {
       padding: "2px 6px",
     } as CSSStyleDeclaration);
     sel.addEventListener("change", () => this.selectStream(sel.value));
-    container.appendChild(sel);
+
+    const recv = document.createElement("span");
+    Object.assign(recv.style, {
+      color: "#7f849c",
+      font: "11px ui-monospace, monospace",
+      whiteSpace: "nowrap",
+    } as CSSStyleDeclaration);
+
+    wrap.append(sel, recv);
+    container.appendChild(wrap);
     this.streamSelect = sel;
+    this.recvLabel = recv;
   }
 
   /** Rebuild the stream dropdown from a backend stream list. */
@@ -529,12 +547,12 @@ export class App {
     this._renderMeta();
   }
 
-  /** HUD meta line: the measured received-frame rate (stream name/ch/Hz now
-   *  live in the stream dropdown). */
+  /** Show the measured received-frame rate next to the stream dropdown. */
   private _renderMeta(): void {
-    const meta = document.getElementById("meta");
-    if (!meta) return;
-    meta.textContent = this.recvRate > 0 ? `recv ${this.recvRate.toFixed(1)}Hz` : "";
+    if (this.recvLabel) {
+      this.recvLabel.textContent =
+        this.recvRate > 0 ? `recv ${this.recvRate.toFixed(1)}Hz` : "";
+    }
   }
 
   /** Cheap per-frame handler: buffer the frame and tally the receive rate. */
