@@ -68,8 +68,7 @@ export class App {
   // Frames received but not yet rendered; the render loop drains them so it can
   // skip stale frames for the 3D view when behind.
   private pendingFrames: EEGFramePayload[] = [];
-  // HUD: stream info text + received-frame rate (windowed count, Hz).
-  private streamInfoText = "";
+  // HUD: received-frame rate (windowed count, Hz).
   private recvRate = 0;
   private recvCount = 0;
   private recvWindowStart = 0;
@@ -213,10 +212,10 @@ export class App {
     sel.title = "Input stream";
     Object.assign(sel.style, {
       position: "fixed",
-      top: "6px",
-      left: "8px",
-      zIndex: "7",
-      maxWidth: "300px",
+      bottom: "34px",
+      left: "12px",
+      zIndex: "11",
+      maxWidth: "340px",
       background: "rgba(5,7,13,0.85)",
       color: "#cdd6f4",
       border: "1px solid rgba(255,255,255,0.2)",
@@ -523,9 +522,6 @@ export class App {
   private handleStatus(s: StatusPayload): void {
     const text = `${s.mode}${s.message ? " — " + s.message : ""}`;
     this.setStatusText(text, s.connected);
-    this.streamInfoText = s.stream
-      ? `${s.stream.name} · ${s.stream.channel_count}ch @ ${s.stream.sample_rate}Hz`
-      : "";
     if (s.stream) {
       this.resampler.setRate(s.stream.sample_rate);
       this.filteredResampler.setRate(s.stream.sample_rate);
@@ -533,13 +529,12 @@ export class App {
     this._renderMeta();
   }
 
-  /** HUD meta line: stream info plus the measured received-frame rate. */
+  /** HUD meta line: the measured received-frame rate (stream name/ch/Hz now
+   *  live in the stream dropdown). */
   private _renderMeta(): void {
     const meta = document.getElementById("meta");
     if (!meta) return;
-    const rate =
-      this.recvRate > 0 ? ` · recv ${this.recvRate.toFixed(1)}Hz` : "";
-    meta.textContent = this.streamInfoText + rate;
+    meta.textContent = this.recvRate > 0 ? `recv ${this.recvRate.toFixed(1)}Hz` : "";
   }
 
   /** Cheap per-frame handler: buffer the frame and tally the receive rate. */
