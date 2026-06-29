@@ -1,28 +1,33 @@
-import type { App } from "../app";
+import type { App, DisplayMode } from "../app";
 
-// Bandpass band by key: ~/§/0 = none, 1..5 = delta..gamma.
+// Bandpass band by key: letters (mnemonic) + 0 = none.
 const BAND_KEYS: Record<string, string> = {
-  "`": "none",
-  "~": "none",
-  "§": "none",
   "0": "none",
-  "1": "delta",
-  "2": "theta",
-  "3": "alpha",
-  "4": "beta",
-  "5": "gamma",
+  d: "delta",
+  t: "theta",
+  a: "alpha",
+  b: "beta",
+  g: "gamma",
 };
+
+// Top display panels selected sequentially by the number keys 1..N.
+const TAB_ORDER: DisplayMode[] = [
+  "trace",
+  "power",
+  "rawtrace",
+  "bands",
+  "fft",
+  "features",
+  "asymmetry",
+];
 
 /**
  * Keyboard controls:
- *   Tab     : cycle the top display panel (Shift+Tab = reverse)
- *   Z       : signal trace display
- *   X       : power trace display
- *   R       : raw signal trace display
- *   C       : FFT spectrum display
- *   V       : feature heatmap display
- *   ~/§/0–5 : bandpass band (none/delta/theta/alpha/beta/gamma)
- *   ↑/↓     : head cutaway / transparency
+ *   Tab       : cycle the top display panel (Shift+Tab = reverse)
+ *   1–7       : select the panel sequentially (trace/power/raw/bands/fft/
+ *               features/asymmetry)
+ *   a/b/g/d/t : bandpass alpha/beta/gamma/delta/theta;  0 = none
+ *   ↑/↓       : head cutaway / transparency
  */
 export function installKeyboard(app: App): void {
   const held = new Set<string>();
@@ -46,28 +51,15 @@ export function installKeyboard(app: App): void {
         app.cycleDisplay(e.shiftKey ? -1 : 1);
         e.preventDefault();
         break;
-      case "z":
-      case "Z":
-        app.toggleDisplay("trace");
-        break;
-      case "x":
-      case "X":
-        app.toggleDisplay("power"); // power (mean-square envelope) traces
-        break;
-      case "r":
-      case "R":
-        app.toggleDisplay("rawtrace"); // raw signal, before filtering
-        break;
-      case "c":
-      case "C":
-        app.toggleDisplay("fft");
-        break;
-      case "v":
-      case "V":
-        app.toggleDisplay("features"); // feature heatmap (Hjorth, entropy, …)
-        break;
       default: {
-        const band = BAND_KEYS[e.key];
+        // 1..N select a top panel sequentially.
+        if (e.key >= "1" && e.key <= "9") {
+          const idx = Number(e.key) - 1;
+          if (idx < TAB_ORDER.length) app.setDisplay(TAB_ORDER[idx]);
+          break;
+        }
+        // Letters (+ 0) select the bandpass band.
+        const band = BAND_KEYS[e.key.toLowerCase()];
         if (band) app.setBand(band);
       }
     }
