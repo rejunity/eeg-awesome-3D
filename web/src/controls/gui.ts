@@ -297,6 +297,7 @@ export function installGUI(app: App): GUI {
     .add(state, "headLitByElectrodes")
     .name("Head lit by electrodes")
     .onChange((v: boolean) => app.setHeadLitByElectrodes(v));
+  anatomy.close();
 
   // Feature-extractor recompute cadence (throttles bands/features, not the trace).
   const adv = gui.addFolder("Extractor cadence");
