@@ -13,7 +13,7 @@ import type { EEGFramePayload } from "../net/protocol";
  * Channel names live in a fixed left gutter (never drawn over the heatmap), and
  * the canvas is resized to the pane's pixel size so text isn't stretched.
  */
-export type BandMode = "bands" | "fft" | "features" | "asymmetry" | "lobes";
+export type BandMode = "bands" | "fft" | "features" | "asymmetry";
 
 const BAND_ORDER = ["delta", "theta", "alpha", "beta", "gamma"];
 const GUTTER = 54; // left column reserved for channel names (px)
@@ -75,7 +75,6 @@ export class BandTexture {
     if (this.mode === "fft" && frame.fft) this.drawFFT(frame);
     else if (this.mode === "features") this.drawFeatures(frame);
     else if (this.mode === "asymmetry") this.drawAsymmetry(frame);
-    else if (this.mode === "lobes") this.drawLobes(frame);
     else this.drawBands(frame);
     this.texture.needsUpdate = true;
   }
@@ -85,25 +84,6 @@ export class BandTexture {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  private drawBands(frame: EEGFramePayload): void {
-    const { width, height } = this.canvas;
-    const ctx = this.ctx;
-    this.clear();
-    const nCh = frame.channels.length;
-    if (nCh === 0) return;
-    const cellH = height / nCh;
-    const cellW = (width - GUTTER) / BAND_ORDER.length;
-
-    for (let b = 0; b < BAND_ORDER.length; b++) {
-      const values = frame.bands[BAND_ORDER[b]] ?? [];
-      for (let i = 0; i < nCh; i++) {
-        ctx.fillStyle = `#${heat(this.contrast(values[i] ?? 0)).getHexString()}`;
-        ctx.fillRect(GUTTER + b * cellW, i * cellH, cellW - 1, cellH - 1);
-      }
-    }
-    this.drawColLabels(BAND_ORDER, cellW);
-    this.drawRowLabels(frame.channels, cellH);
-  }
 
   private drawFFT(frame: EEGFramePayload): void {
     const { width, height } = this.canvas;
@@ -168,7 +148,8 @@ export class BandTexture {
     this.drawRowLabels(frame.channels, cellH);
   }
 
-  private drawLobes(frame: EEGFramePayload): void {
+  // "bands" pane: per-lobe band power (region x band heatmap, FFT colour ramp).
+  private drawBands(frame: EEGFramePayload): void {
     const { width, height } = this.canvas;
     const ctx = this.ctx;
     this.clear();
