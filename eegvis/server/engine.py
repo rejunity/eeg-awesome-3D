@@ -20,7 +20,7 @@ import time
 import numpy as np
 
 from ..config import AppConfig
-from ..lsl.discovery import LSLNotAvailable, discover_streams
+from ..lsl.discovery import DiscoveredStream, LSLNotAvailable, discover_streams
 from ..lsl.receiver import LSLReceiver
 from ..lsl.synthetic import SyntheticStream
 from ..models import (
@@ -65,6 +65,7 @@ class Engine:
         # Discovered LSL streams (refreshed by the scanner) and the source_id of
         # the currently selected stream ("synthetic" for the generator).
         self.available_streams: list[StreamDescriptor] = []
+        self._discovered: list[DiscoveredStream] = []  # raw infos for fast switch
         self._current_source: str | None = None
 
     # -- lifecycle -----------------------------------------------------------
@@ -267,13 +268,18 @@ class Engine:
 
     # -- stream discovery / switching ----------------------------------------
 
-    def _discover_descriptors(self) -> list[StreamDescriptor]:
-        """Blocking: resolve all visible LSL streams into descriptors."""
+    def _discover(self) -> list[DiscoveredStream]:
+        """Blocking: resolve all visible LSL streams."""
         try:
-            found = discover_streams(timeout=1.0)
+            return discover_streams(timeout=1.0)
         except Exception:
             return []
-        return [
+
+    async def scan_streams(self) -> None:
+        """Refresh the available-stream list (off the event loop)."""
+        loop = asyncio.get_event_loop()
+        self._discovered = await loop.run_in_executor(None, self._discover)
+        self.available_streams = [
             StreamDescriptor(
                 name=s.metadata.name,
                 source_id=s.metadata.source_id,
@@ -281,15 +287,8 @@ class Engine:
                 channel_count=s.metadata.channel_count,
                 sample_rate=s.metadata.nominal_srate,
             )
-            for s in found
+            for s in self._discovered
         ]
-
-    async def scan_streams(self) -> None:
-        """Refresh the available-stream list (off the event loop)."""
-        loop = asyncio.get_event_loop()
-        self.available_streams = await loop.run_in_executor(
-            None, self._discover_descriptors
-        )
 
     def streams_payload(self) -> StreamsPayload:
         synthetic = StreamDescriptor(
@@ -334,15 +333,21 @@ class Engine:
             self._start_synthetic("synthetic selected")
             return
 
-        # Pin the chosen stream by source_id and (re)start the receiver.
+        # Pin the chosen stream by source_id and (re)start the receiver. Hand it
+        # the already-resolved StreamInfo from the last scan so it connects
+        # instantly instead of re-resolving (~5 s).
         self.force_synthetic = False
         self.config.stream.source_id = source_id
         self.config.stream.name = None
+        preset = next(
+            (d for d in self._discovered if d.metadata.source_id == source_id), None
+        )
         try:
             self._receiver = LSLReceiver(
                 self.config.stream,
                 on_chunk=self._enqueue_chunk,
                 on_status=self._on_lsl_status,
+                preset=preset,
             )
             self._receiver.start()
             self.mode = "lsl"

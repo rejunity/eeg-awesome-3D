@@ -59,11 +59,15 @@ class LSLReceiver:
         on_chunk: Callable[[EEGChunk], None],
         on_status: StatusCallback | None = None,
         max_chunk_duration: float = 0.2,
+        preset: DiscoveredStream | None = None,
     ):
         self.config = config
         self._on_chunk = on_chunk
         self._on_status = on_status or (lambda *a: None)
         self._max_chunk_duration = max_chunk_duration
+        # An already-resolved stream (from a recent scan) to open immediately on
+        # the first connect, skipping the slow re-resolve — used for live switches.
+        self._preset = preset
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self.metadata: StreamMetadata | None = None
@@ -90,8 +94,13 @@ class LSLReceiver:
     def _run(self) -> None:
         import pylsl
 
+        # Use the preset (already-resolved) stream on the first iteration so a
+        # live switch connects instantly; re-resolve on any later reconnect.
+        preset = self._preset
+        self._preset = None
         while not self._stop.is_set():
-            chosen = self._resolve()
+            chosen = preset or self._resolve()
+            preset = None
             if chosen is None:
                 self._on_status("searching", False, None)
                 if self._stop.wait(1.0):
