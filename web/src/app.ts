@@ -12,6 +12,7 @@ import type {
   EEGFramePayload,
   ElectrodeResponse,
   StatusPayload,
+  StreamsPayload,
 } from "./net/protocol";
 
 export type DisplayMode =
@@ -44,6 +45,8 @@ export class App {
   private displayOverlay!: HTMLDivElement;
   // The display-mode dropdown attached to the top pane (always visible).
   private displaySelect?: HTMLSelectElement;
+  // The LSL input-stream selector (top-left), refreshed from backend scans.
+  private streamSelect?: HTMLSelectElement;
   // FFT-contrast control on the top pane (shown only in fft mode).
   private fftContrastCtl?: HTMLElement;
   // The lil-gui control panel, repositioned to follow the viewport top.
@@ -200,6 +203,53 @@ export class App {
     window.addEventListener("resize", sizeBands);
 
     this._buildDisplaySelect(container);
+    this._buildStreamSelect(container);
+  }
+
+  /** The LSL stream selector (top-left): switch the active source live. Its
+   *  options are refreshed whenever the backend pushes the stream list. */
+  private _buildStreamSelect(container: HTMLElement): void {
+    const sel = document.createElement("select");
+    sel.title = "Input stream";
+    Object.assign(sel.style, {
+      position: "fixed",
+      top: "6px",
+      left: "8px",
+      zIndex: "7",
+      maxWidth: "300px",
+      background: "rgba(5,7,13,0.85)",
+      color: "#cdd6f4",
+      border: "1px solid rgba(255,255,255,0.2)",
+      borderRadius: "4px",
+      font: "12px ui-monospace, monospace",
+      padding: "2px 6px",
+    } as CSSStyleDeclaration);
+    sel.addEventListener("change", () => this.selectStream(sel.value));
+    container.appendChild(sel);
+    this.streamSelect = sel;
+  }
+
+  /** Rebuild the stream dropdown from a backend stream list. */
+  private handleStreams(payload: StreamsPayload): void {
+    const sel = this.streamSelect;
+    if (!sel) return;
+    const prev = sel.value;
+    sel.replaceChildren();
+    for (const s of payload.streams) {
+      const o = document.createElement("option");
+      o.value = s.source_id ?? s.name;
+      const hz = s.sample_rate ? ` @ ${Math.round(s.sample_rate)}Hz` : "";
+      o.textContent = `${s.name} (${s.channel_count}ch${hz})`;
+      sel.appendChild(o);
+    }
+    // Keep the user's in-progress choice if still present; else follow current.
+    const want = payload.current ?? prev;
+    if (want && [...sel.options].some((o) => o.value === want)) sel.value = want;
+  }
+
+  /** Ask the backend to switch the active input stream. */
+  selectStream(sourceId: string): void {
+    this.socket.send({ type: "select_stream", source_id: sourceId });
   }
 
   /** The display-mode dropdown (always visible) + an FFT-contrast control that
@@ -300,6 +350,7 @@ export class App {
   private connect(): void {
     this.socket.onStatus = (s) => this.handleStatus(s);
     this.socket.onFrame = (f) => this.enqueueFrame(f);
+    this.socket.onStreams = (s) => this.handleStreams(s);
     this.socket.onClose = () => this.setStatusText("disconnected — reconnecting…", false);
     // Sync the band selection + run cadence to the backend on (re)connect.
     this.socket.onOpen = () => {

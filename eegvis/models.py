@@ -116,6 +116,23 @@ class StatusPayload(BaseModel):
     stream: StreamInfoPayload | None = None
 
 
+class StreamDescriptor(BaseModel):
+    name: str
+    source_id: str | None = None
+    type: str = ""
+    channel_count: int = 0
+    sample_rate: float = 0.0
+
+
+class StreamsPayload(BaseModel):
+    type: str = "streams"
+    schema_version: int = SCHEMA_VERSION
+    # Available streams (incl. a synthetic option), plus the currently selected
+    # source_id ("synthetic" for the synthetic generator).
+    streams: list[StreamDescriptor] = Field(default_factory=list)
+    current: str | None = None
+
+
 class QualityPayload(BaseModel):
     samples_received: int = 0
     dropped_chunks: int = 0

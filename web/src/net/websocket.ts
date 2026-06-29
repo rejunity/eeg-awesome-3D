@@ -1,8 +1,9 @@
 import type { ServerMessage } from "./protocol";
-import { isFrame, isStatus } from "./protocol";
+import { isFrame, isStatus, isStreams } from "./protocol";
 
 type StatusHandler = (m: import("./protocol").StatusPayload) => void;
 type FrameHandler = (m: import("./protocol").EEGFramePayload) => void;
+type StreamsHandler = (m: import("./protocol").StreamsPayload) => void;
 
 /**
  * Resilient WebSocket client for /ws/eeg with auto-reconnect.
@@ -17,6 +18,7 @@ export class EEGSocket {
 
   onStatus: StatusHandler = () => {};
   onFrame: FrameHandler = () => {};
+  onStreams: StreamsHandler = () => {};
   onOpen: () => void = () => {};
   onClose: () => void = () => {};
 
@@ -80,6 +82,7 @@ export class EEGSocket {
   private route(m: ServerMessage): void {
     if (isStatus(m)) this.onStatus(m);
     else if (isFrame(m)) this.onFrame(m);
+    else if (isStreams(m)) this.onStreams(m);
   }
 
   private scheduleReconnect(): void {

@@ -66,7 +66,22 @@ export interface EEGFramePayload {
   quality: QualityInfo;
 }
 
-export type ServerMessage = StatusPayload | EEGFramePayload;
+export interface StreamDescriptor {
+  name: string;
+  source_id: string | null;
+  type: string;
+  channel_count: number;
+  sample_rate: number;
+}
+
+export interface StreamsPayload {
+  type: "streams";
+  schema_version: number;
+  streams: StreamDescriptor[];
+  current: string | null; // selected source_id ("synthetic" for the generator)
+}
+
+export type ServerMessage = StatusPayload | EEGFramePayload | StreamsPayload;
 
 export function isStatus(m: ServerMessage): m is StatusPayload {
   return m.type === "status";
@@ -74,6 +89,10 @@ export function isStatus(m: ServerMessage): m is StatusPayload {
 
 export function isFrame(m: ServerMessage): m is EEGFramePayload {
   return m.type === "eeg_frame";
+}
+
+export function isStreams(m: ServerMessage): m is StreamsPayload {
+  return m.type === "streams";
 }
 
 export interface ElectrodeMeta {

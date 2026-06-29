@@ -37,6 +37,7 @@ def create_app(config: AppConfig, synthetic: bool = False) -> FastAPI:
     async def lifespan(app: FastAPI):
         await engine.start()
         status_task = asyncio.create_task(_status_broadcaster(engine))
+        scan_task = asyncio.create_task(_stream_scanner(engine))
         # The uvicorn server is attached by the CLI (app.state.uvicorn_server)
         # so idle-shutdown can ask it to exit. Absent in tests -> no-op.
         shutdown.server = getattr(app.state, "uvicorn_server", None)
@@ -45,8 +46,11 @@ def create_app(config: AppConfig, synthetic: bool = False) -> FastAPI:
         finally:
             shutdown.cancel()
             status_task.cancel()
+            scan_task.cancel()
             with suppress(asyncio.CancelledError):
                 await status_task
+            with suppress(asyncio.CancelledError):
+                await scan_task
             await engine.stop()
 
     app = FastAPI(title="eegvis", lifespan=lifespan)
@@ -80,15 +84,16 @@ def create_app(config: AppConfig, synthetic: bool = False) -> FastAPI:
         await manager.connect(ws)
         _enable_tcp_nodelay(ws)  # avoid Nagle/delayed-ACK stalls on small frames
         shutdown.on_connect()
-        # Send current status immediately on connect.
+        # Send current status + available streams immediately on connect.
         await manager.send_json(ws, engine.status.model_dump())
+        await manager.send_json(ws, engine.streams_payload().model_dump())
         if engine.latest_frame is not None:
             await manager.send_json(ws, engine.latest_frame.model_dump())
         try:
             while True:
                 # Client may send small control messages (e.g. band selection).
                 text = await ws.receive_text()
-                _handle_client_message(engine, text)
+                await _handle_client_message(engine, text)
         except WebSocketDisconnect:
             pass
         finally:
@@ -171,7 +176,7 @@ def _enable_tcp_nodelay(ws: WebSocket) -> None:
         pass
 
 
-def _handle_client_message(engine: Engine, text: str) -> None:
+async def _handle_client_message(engine: Engine, text: str) -> None:
     """Apply a control message from a browser client (best-effort)."""
     try:
         data = json.loads(text)
@@ -179,7 +184,9 @@ def _handle_client_message(engine: Engine, text: str) -> None:
         return
     if not isinstance(data, dict):
         return
-    if data.get("type") == "set_band_run":
+    if data.get("type") == "select_stream":
+        await engine.select_stream(data.get("source_id"))
+    elif data.get("type") == "set_band_run":
         engine.set_band_run(data.get("mode"), data.get("hz"))
     elif data.get("type") == "set_bandpass":
         engine.set_bandpass(data.get("enabled"), data.get("low_hz"), data.get("high_hz"))
@@ -205,4 +212,16 @@ async def _status_broadcaster(engine: Engine, interval: float = 2.0) -> None:
         if current != last and engine.manager.client_count:
             await engine.broadcast_status()
             last = current
+        await asyncio.sleep(interval)
+
+
+async def _stream_scanner(engine: Engine, interval: float = 3.0) -> None:
+    """Re-scan for available LSL streams and push the list to clients."""
+    while True:
+        try:
+            await engine.scan_streams()
+            if engine.manager.client_count:
+                await engine.broadcast_streams()
+        except Exception:
+            pass
         await asyncio.sleep(interval)

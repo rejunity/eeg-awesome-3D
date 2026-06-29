@@ -20,10 +20,18 @@ import time
 import numpy as np
 
 from ..config import AppConfig
-from ..lsl.discovery import LSLNotAvailable
+from ..lsl.discovery import LSLNotAvailable, discover_streams
 from ..lsl.receiver import LSLReceiver
 from ..lsl.synthetic import SyntheticStream
-from ..models import EEGChunk, EEGFramePayload, StatusPayload, StreamInfoPayload, StreamMetadata
+from ..models import (
+    EEGChunk,
+    EEGFramePayload,
+    StatusPayload,
+    StreamDescriptor,
+    StreamInfoPayload,
+    StreamMetadata,
+    StreamsPayload,
+)
 from ..processing.pipeline import Pipeline
 from .websocket import ConnectionManager
 
@@ -54,6 +62,10 @@ class Engine:
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
         self._configured_for: StreamMetadata | None = None
+        # Discovered LSL streams (refreshed by the scanner) and the source_id of
+        # the currently selected stream ("synthetic" for the generator).
+        self.available_streams: list[StreamDescriptor] = []
+        self._current_source: str | None = None
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -96,6 +108,7 @@ class Engine:
     def _start_synthetic(self, message: str) -> None:
         self._synthetic = SyntheticStream(self.config.synthetic, start_time=time.monotonic())
         self.mode = "synthetic"
+        self._current_source = "synthetic"
         self.pipeline.configure(self._synthetic.metadata)
         self._configured_for = self._synthetic.metadata
         self._set_status(True, "synthetic", message, self._synthetic.metadata)
@@ -121,6 +134,7 @@ class Engine:
         }.get(state, state)
         if metadata is not None:
             self._configured_for = None  # force reconfigure on next chunk
+            self._current_source = metadata.source_id
         self._set_status(connected, "lsl", msg, metadata)
 
     # -- main loop -----------------------------------------------------------
@@ -250,6 +264,92 @@ class Engine:
 
     async def broadcast_status(self) -> None:
         await self.manager.broadcast_json(self.status.model_dump())
+
+    # -- stream discovery / switching ----------------------------------------
+
+    def _discover_descriptors(self) -> list[StreamDescriptor]:
+        """Blocking: resolve all visible LSL streams into descriptors."""
+        try:
+            found = discover_streams(timeout=1.0)
+        except Exception:
+            return []
+        return [
+            StreamDescriptor(
+                name=s.metadata.name,
+                source_id=s.metadata.source_id,
+                type=s.metadata.type,
+                channel_count=s.metadata.channel_count,
+                sample_rate=s.metadata.nominal_srate,
+            )
+            for s in found
+        ]
+
+    async def scan_streams(self) -> None:
+        """Refresh the available-stream list (off the event loop)."""
+        loop = asyncio.get_event_loop()
+        self.available_streams = await loop.run_in_executor(
+            None, self._discover_descriptors
+        )
+
+    def streams_payload(self) -> StreamsPayload:
+        synthetic = StreamDescriptor(
+            name="Synthetic EEG",
+            source_id="synthetic",
+            type="EEG",
+            channel_count=self.config.synthetic.channel_count,
+            sample_rate=self.config.synthetic.sample_rate,
+        )
+        return StreamsPayload(
+            streams=[synthetic, *self.available_streams],
+            current=self._current_source,
+        )
+
+    async def broadcast_streams(self) -> None:
+        await self.manager.broadcast_json(self.streams_payload().model_dump())
+
+    async def select_stream(self, source_id: str | None) -> None:
+        """Switch the active source to ``source_id`` ("synthetic" = generator)."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._switch_source_blocking, source_id)
+        await self.broadcast_status()
+        await self.broadcast_streams()
+
+    def _switch_source_blocking(self, source_id: str | None) -> None:
+        # Tear down the current source.
+        if self._receiver is not None:
+            self._receiver.stop()
+            self._receiver = None
+        self._synthetic = None
+        self._configured_for = None
+        self._hum_scale = None
+        # Drop any chunks still queued from the previous stream.
+        try:
+            while True:
+                self._chunk_queue.get_nowait()
+        except queue.Empty:
+            pass
+
+        if source_id == "synthetic" or source_id is None:
+            self.force_synthetic = True
+            self._start_synthetic("synthetic selected")
+            return
+
+        # Pin the chosen stream by source_id and (re)start the receiver.
+        self.force_synthetic = False
+        self.config.stream.source_id = source_id
+        self.config.stream.name = None
+        try:
+            self._receiver = LSLReceiver(
+                self.config.stream,
+                on_chunk=self._enqueue_chunk,
+                on_status=self._on_lsl_status,
+            )
+            self._receiver.start()
+            self.mode = "lsl"
+            self._current_source = source_id
+            self._set_status(False, "lsl", "switching to selected stream")
+        except LSLNotAvailable as exc:
+            self._set_status(False, "disconnected", str(exc))
 
     def set_band_run(self, mode: str | None, hz: float | None) -> None:
         """Set the global processor run cadence (realtime | frequency | per-sample)."""
