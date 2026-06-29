@@ -11,7 +11,7 @@ const BAND_KEYS: Record<string, string> = {
 };
 
 // Top display panels selected sequentially by the number keys 1..N.
-const TAB_ORDER: DisplayMode[] = [
+const TAB_ORDER: Exclude<DisplayMode, "none">[] = [
   "trace",
   "power",
   "rawtrace",
@@ -55,10 +55,10 @@ export function installKeyboard(app: App): void {
         app.setBand("none"); // disable the global bandpass
         break;
       default: {
-        // 1..N select a top panel sequentially.
+        // 1..N select a top panel sequentially; pressing the active one closes it.
         if (e.key >= "1" && e.key <= "9") {
           const idx = Number(e.key) - 1;
-          if (idx < TAB_ORDER.length) app.setDisplay(TAB_ORDER[idx]);
+          if (idx < TAB_ORDER.length) app.toggleDisplay(TAB_ORDER[idx]);
           break;
         }
         // Letters (+ 0) select the bandpass band.
