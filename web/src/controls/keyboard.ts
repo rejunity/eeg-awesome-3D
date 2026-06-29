@@ -26,7 +26,7 @@ const TAB_ORDER: DisplayMode[] = [
  *   Tab       : cycle the top display panel (Shift+Tab = reverse)
  *   1–7       : select the panel sequentially (trace/power/raw/bands/fft/
  *               features/asymmetry)
- *   a/b/g/d/t : bandpass alpha/beta/gamma/delta/theta;  0 = none
+ *   a/b/g/d/t : bandpass alpha/beta/gamma/delta/theta;  0 / Esc = none
  *   ↑/↓       : head cutaway / transparency
  */
 export function installKeyboard(app: App): void {
@@ -50,6 +50,9 @@ export function installKeyboard(app: App): void {
       case "Tab":
         app.cycleDisplay(e.shiftKey ? -1 : 1);
         e.preventDefault();
+        break;
+      case "Escape":
+        app.setBand("none"); // disable the global bandpass
         break;
       default: {
         // 1..N select a top panel sequentially.
