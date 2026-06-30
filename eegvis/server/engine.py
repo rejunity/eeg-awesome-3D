@@ -370,6 +370,10 @@ class Engine:
         """Enable/disable the global common-average-reference filter."""
         self.pipeline.set_car(enabled)
 
+    def set_physio(self, enabled: bool) -> None:
+        """Enable/disable the systemic-physiology (fNIRS) removal filter."""
+        self.pipeline.set_physio(enabled)
+
     def set_notch(self, enabled: bool | None, hz: float | None) -> None:
         """Enable/retune the global notch filter."""
         self.pipeline.set_notch(enabled, hz)

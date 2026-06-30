@@ -131,6 +131,72 @@ class NotchProcessor(_SOSFilterProcessor):
         self._redesign()
 
 
+class PhysiologyFilter(_SOSFilterProcessor):
+    """Remove systemic physiological oscillations (fNIRS/optical contaminants).
+
+    Haemodynamic / optical recordings (and slow EEG) are dominated by systemic
+    oscillations that aren't neural:
+
+      * Very-low-frequency drift / vasomotion — below ~0.05 Hz (baseline wander)
+      * Mayer waves (blood-pressure / vasomotion) — ~0.1 Hz (0.08–0.12 Hz)
+      * Respiration — ~0.2–0.5 Hz (12–30 breaths/min)
+      * Cardiac pulsation — ~1–1.5 Hz (up to ~2 Hz)
+
+    This is a cascade of SOS sections: a high-pass to kill the VLF drift/baseline
+    wander plus band-stops over the Mayer, respiration and cardiac bands.
+
+    OFF by default — these bands overlap the EEG delta range, so removing them
+    harms a genuine EEG signal. The Mayer band in particular sits right in the
+    haemodynamic response band and is better handled by short-separation
+    regression; the band-stop here is a coarse approximation. Enable only when
+    targeting optical/haemodynamic data.
+    """
+
+    name = "physio"
+    output_keys = ()
+
+    # (label, low_hz, high_hz): low_hz == 0 -> high-pass at high_hz; else band-stop.
+    _DEFAULT_BANDS: tuple[tuple[str, float, float], ...] = (
+        ("drift", 0.0, 0.05),  # VLF / baseline wander -> high-pass @ 0.05 Hz
+        ("mayer", 0.08, 0.12),  # Mayer waves / vasomotion
+        ("respiration", 0.15, 0.5),  # respiration
+        ("cardiac", 0.8, 2.0),  # cardiac pulsation
+    )
+
+    def __init__(self, enabled: bool = False, **options: Any):
+        super().__init__(enabled, **options)
+        self.bands = [tuple(b) for b in self.opt("bands", list(self._DEFAULT_BANDS))]
+        self.order = int(self.opt("order", 2))
+
+    def _design(self, sample_rate: float) -> np.ndarray | None:
+        nyq = sample_rate / 2.0
+        if nyq <= 0:
+            return None
+        sections: list[np.ndarray] = []
+        for _label, lo, hi in self.bands:
+            try:
+                if lo <= 0.0:  # high-pass: remove everything below `hi`
+                    wn = float(hi) / nyq
+                    if 0.0 < wn < 1.0:
+                        sections.append(
+                            sp_signal.butter(self.order, wn, btype="highpass", output="sos")
+                        )
+                else:  # band-stop: notch out [lo, hi]
+                    lo_n = float(lo) / nyq
+                    hi_n = min(float(hi), nyq * 0.99) / nyq
+                    if 0.0 < lo_n < hi_n < 1.0:
+                        sections.append(
+                            sp_signal.butter(
+                                self.order, [lo_n, hi_n], btype="bandstop", output="sos"
+                            )
+                        )
+            except (ValueError, FloatingPointError):
+                continue  # skip a section that can't be realised at this rate
+        if not sections:
+            return None
+        return np.vstack(sections)
+
+
 class CARProcessor(EEGProcessor):
     """Common Average Reference: subtract the per-sample mean across EEG channels."""
 

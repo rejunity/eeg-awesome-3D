@@ -25,7 +25,7 @@ from ..models import (
     RegionPowerPayload,
     StreamMetadata,
 )
-from .filters import BandpassProcessor, CARProcessor, NotchProcessor
+from .filters import BandpassProcessor, CARProcessor, NotchProcessor, PhysiologyFilter
 from .registry import create_processor
 
 # Output keys that are a per-sample stream rather than a current value: they are
@@ -57,9 +57,12 @@ class Pipeline:
         # runs every tick and produces the filtered window. CAR defaults from
         # config (on in the bundled default); notch/bandpass default off.
         self.car = CARProcessor(enabled=bool(getattr(config, "car", False)))
+        # Systemic-physiology (fNIRS) removal, off by default. Runs early so its
+        # high-pass drift removal feeds the notch/bandpass downstream.
+        self.physio = PhysiologyFilter(enabled=False)
         self.notch = NotchProcessor(enabled=False, hz=50.0)
         self.bandpass = BandpassProcessor(enabled=False, low_hz=1.0, high_hz=45.0)
-        self.filters = [self.car, self.notch, self.bandpass] + [
+        self.filters = [self.car, self.physio, self.notch, self.bandpass] + [
             create_processor(p.name, p.enabled, p.options()) for p in config.filters
         ]
         # The extractor fan-out (order-independent feature extractors).
@@ -109,6 +112,10 @@ class Pipeline:
     def set_car(self, enabled: bool) -> None:
         """Enable/disable the global common-average-reference filter."""
         self.car.enabled = bool(enabled)
+
+    def set_physio(self, enabled: bool) -> None:
+        """Enable/disable the systemic-physiology (fNIRS) removal filter."""
+        self.physio.enabled = bool(enabled)
 
     def set_notch(self, enabled: bool | None = None, hz: float | None = None) -> None:
         """Enable/retune the global notch at runtime."""

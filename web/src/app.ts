@@ -119,6 +119,7 @@ export class App {
   // Global filter front-end (feeds the trace, electrodes AND extractors).
   readonly filterDefaults = {
     carOn: true,
+    physioOn: false,
     bandpassOn: false,
     bandpassLow: 1,
     bandpassHigh: 45,
@@ -373,6 +374,7 @@ export class App {
     this.socket.onOpen = () => {
       this._sendBandRun();
       this._sendCar();
+      this._sendPhysio();
       this._sendBandpass();
       this._sendNotch();
       this._sendFftSource();
@@ -406,6 +408,20 @@ export class App {
     this.powerTraceStats = new RunningStats();
     this.powerEma = null;
     this._sendCar();
+  }
+
+  private _sendPhysio(): void {
+    this.socket.send({ type: "set_physio", enabled: this.filters.physioOn });
+  }
+
+  /** Enable/disable the systemic-physiology (fNIRS) removal filter. */
+  setPhysio(on: boolean): void {
+    this.filters.physioOn = on;
+    // Re-baseline the filtered/power colour stats since the signal changed.
+    this.filteredStats = new RunningStats();
+    this.powerTraceStats = new RunningStats();
+    this.powerEma = null;
+    this._sendPhysio();
   }
 
   private _sendNotch(): void {

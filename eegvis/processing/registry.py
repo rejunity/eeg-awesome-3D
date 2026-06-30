@@ -13,7 +13,12 @@ from .band_envelope import BandEnvelopeProcessor
 from .band_power import BandPowerProcessor
 from .base import EEGProcessor
 from .fft import FFTProcessor
-from .filters import BandpassProcessor, CARProcessor, NotchProcessor
+from .filters import (
+    BandpassProcessor,
+    CARProcessor,
+    NotchProcessor,
+    PhysiologyFilter,
+)
 from .hjorth import HjorthProcessor
 from .line_length import LineLengthProcessor
 from .normalization import NormalizationProcessor
@@ -27,6 +32,7 @@ PROCESSORS: dict[str, type[EEGProcessor]] = {
     "bandpass": BandpassProcessor,
     "notch": NotchProcessor,
     "car": CARProcessor,
+    "physio": PhysiologyFilter,
     # Display normalisation / smoothing.
     "normalization": NormalizationProcessor,
     "smoothing": SmoothingProcessor,
