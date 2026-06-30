@@ -79,6 +79,50 @@ _UNITY_ELECTRODES: list[tuple[str, float, float, float]] = [
     ("FC5", 28.8, 76.2, 24.2),
     ("AF8", 68.7, -49.7, -5.95),
     # A1 was present but commented out in the Unity reference.
+    #
+    # --- Standard 10-10 extension to the full 64-channel layout --------------
+    # The 29 electrodes above lie on a clean radius-85 sphere following the
+    # standard 10-20 spherical model. These 35 additional 10-10 positions
+    # complete the canonical 64-channel (biosemi64) montage. They are DERIVED,
+    # not from the Unity reference: an analytical Rx(col)*Ry(row) sphere model
+    # fitted to the 29 anchors (correct arc spacing / boundary topology) plus a
+    # bilaterally-symmetric thin-plate-spline residual warp that reproduces
+    # every existing anchor exactly. Regenerate with scripts/gen_1010_positions.py.
+    ("AF3", 72.1, 40.7, 19.0),
+    ("AFz", 78.9, 0.0, 31.6),
+    ("AF4", 72.1, -40.7, 19.0),
+    ("F5", 54.7, 62.7, 17.6),
+    ("F1", 58.8, 28.0, 54.6),
+    ("F2", 58.8, -28.0, 54.6),
+    ("F6", 54.7, -62.7, 17.6),
+    ("FT7", 29.4, 79.3, -8.3),
+    ("FC3", 30.6, 58.8, 53.2),
+    ("FC1", 31.9, 31.9, 72.1),
+    ("FCz", 32.8, 0.0, 78.4),
+    ("FC2", 31.9, -31.9, 72.1),
+    ("FC4", 30.6, -58.8, 53.2),
+    ("FT8", 29.4, -79.3, -8.3),
+    ("C5", 0.0, 80.8, 26.3),
+    ("C1", 0.0, 34.1, 77.8),
+    ("C2", 0.0, -34.1, 77.8),
+    ("C6", 0.0, -80.8, 26.3),
+    ("TP7", -29.4, 79.3, -8.3),
+    ("CP3", -30.6, 58.8, 53.2),
+    ("CP1", -31.9, 31.9, 72.1),
+    ("CPz", -32.8, 0.0, 78.4),
+    ("CP2", -31.9, -31.9, 72.1),
+    ("CP4", -30.6, -58.8, 53.2),
+    ("TP8", -29.4, -79.3, -8.3),
+    ("P9", -53.6, 58.7, -30.2),
+    ("P5", -54.7, 62.7, 17.6),
+    ("P1", -58.8, 28.0, 54.6),
+    ("P2", -58.8, -28.0, 54.6),
+    ("P6", -54.7, -62.7, 17.6),
+    ("P10", -53.6, -58.7, -30.2),
+    ("PO3", -72.1, 40.7, 19.0),
+    ("POz", -78.9, 0.0, 31.6),
+    ("PO4", -72.1, -40.7, 19.0),
+    ("Iz", -77.8, 0.0, -34.3),
 ]
 
 
@@ -136,6 +180,20 @@ _QUICK32R_EEG: list[str] = [
     "Pz", "PO7", "T8", "C3", "Fp2", "F3", "F8", "FC5", "AF8",
 ]
 
+# Standard 64-channel 10-10 layout (canonical "biosemi64" set). Not a CGX cap —
+# this is the generic full montage whose positions are in ELECTRODES above, for
+# 64-channel streams (e.g. covering the IFG / superior-temporal ROIs that the
+# 19/29-channel CGX caps miss: FT7/FC3/F5, FT8/FC4/F6, TP7/C5, TP8/C6, ...).
+_STANDARD64_EEG: list[str] = [
+    "Fp1", "Fpz", "Fp2", "AF7", "AF3", "AFz", "AF4", "AF8",
+    "F7", "F5", "F3", "F1", "Fz", "F2", "F4", "F6", "F8",
+    "FT7", "FC5", "FC3", "FC1", "FCz", "FC2", "FC4", "FC6", "FT8",
+    "T7", "C5", "C3", "C1", "Cz", "C2", "C4", "C6", "T8",
+    "TP7", "CP5", "CP3", "CP1", "CPz", "CP2", "CP4", "CP6", "TP8",
+    "P9", "P7", "P5", "P3", "P1", "Pz", "P2", "P4", "P6", "P8", "P10",
+    "PO7", "PO3", "POz", "PO4", "PO8", "O1", "Oz", "O2", "Iz",
+]
+
 
 @dataclass(frozen=True)
 class CGXMontage:
@@ -161,13 +219,20 @@ def _build_montage(label: str, eeg_names: list[str]) -> CGXMontage:
     return CGXMontage(label, len(eeg_names), names, types)
 
 
+def _build_eeg_montage(label: str, eeg_names: list[str]) -> CGXMontage:
+    """A plain EEG montage with no trailing aux channels (e.g. a 10-10 cap)."""
+    return CGXMontage(label, len(eeg_names), list(eeg_names), ["eeg"] * len(eeg_names))
+
+
 QUICK20R = _build_montage("CGX Quick20r", _QUICK20R_EEG)  # 27 channels total
 QUICK32R = _build_montage("CGX Quick32r", _QUICK32R_EEG)  # 37 channels total
+STANDARD64 = _build_eeg_montage("Standard 10-10 (64)", _STANDARD64_EEG)  # 64 total
 
 # Map total channel count -> montage, for auto-detection from a live stream.
 MONTAGE_BY_CHANNEL_COUNT: dict[int, CGXMontage] = {
     QUICK20R.total_channel_count: QUICK20R,
     QUICK32R.total_channel_count: QUICK32R,
+    STANDARD64.total_channel_count: STANDARD64,
 }
 
 
