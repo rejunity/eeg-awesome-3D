@@ -21,6 +21,9 @@ import type { ElectrodeMeta } from "../net/protocol";
 import { electrodeColor, type ColorScheme } from "./colormap";
 
 const BLACK = new Color(0x000000);
+// Dim neutral glow for electrodes not populated by the stream, shown only when
+// the "show all electrodes" debug toggle is on (otherwise they stay black).
+const INACTIVE_GLOW = new Color(0x2a3340);
 // How far above the electrode marker (along the outward normal) the name floats.
 const LABEL_OFFSET = 0.12;
 // Base label world size (canvas aspect 2:1) and the default scale (GUI default).
@@ -64,6 +67,11 @@ export class Electrodes {
   private debugElectrode: string | null = null;
   private colorScheme: ColorScheme = "blue-yellow";
   private shape: ElectrodeShape = "sphere";
+  // Debug: when true, electrodes absent from the stream are shown with a dim
+  // neutral glow instead of being left black/invisible.
+  private showAll = false;
+  // Keys of the nodes populated by the most recent frame's channels.
+  private activeKeys = new Set<string>();
 
   private readonly sphereGeo = new SphereGeometry(0.04, 16, 12);
   private readonly coneGeo = new ConeGeometry(0.045, CONE_HEIGHT, 20);
@@ -111,6 +119,29 @@ export class Electrodes {
 
   setDebugElectrode(name: string | null): void {
     this.debugElectrode = name ? normalize(name) : null;
+  }
+
+  /**
+   * Debug: show every electrode, including those not populated by the stream.
+   * Unpopulated markers get a dim neutral glow so all 10-10 sites are visible;
+   * turning it off restores them to black. Applied immediately to the inactive
+   * set so it works even when no frames are arriving.
+   */
+  setShowAll(v: boolean): void {
+    this.showAll = v;
+    for (const [key, node] of this.nodes) {
+      if (!this.activeKeys.has(key)) this.paintInactive(node);
+    }
+  }
+
+  /** Paint a node not driven by the stream: dim glow if showAll, else black. */
+  private paintInactive(node: ElectrodeNode): void {
+    const isolated =
+      this.debugElectrode !== null && normalize(node.name) !== this.debugElectrode;
+    const glow = this.showAll && !isolated ? INACTIVE_GLOW : BLACK;
+    node.material.emissive.copy(glow);
+    node.material.emissiveIntensity = 1.0;
+    node.light.intensity = 0; // unpopulated markers don't cast coloured light
   }
 
   setColorScheme(scheme: ColorScheme): void {
@@ -212,9 +243,12 @@ export class Electrodes {
    * light intensity is constant.
    */
   update(channels: string[], normalized: number[]): void {
+    this.activeKeys.clear();
     for (let i = 0; i < channels.length; i++) {
-      const node = this.nodes.get(normalize(channels[i]));
+      const key = normalize(channels[i]);
+      const node = this.nodes.get(key);
       if (!node) continue;
+      this.activeKeys.add(key);
 
       const isolated =
         this.debugElectrode !== null &&
@@ -227,6 +261,10 @@ export class Electrodes {
       node.material.emissiveIntensity = 1.0;
       node.light.color.copy(color);
       node.light.intensity = this.indicatorsVisible && !isolated ? 1 : 0;
+    }
+    // Electrodes the stream doesn't populate: dim glow if "show all" is on.
+    for (const [key, node] of this.nodes) {
+      if (!this.activeKeys.has(key)) this.paintInactive(node);
     }
   }
 

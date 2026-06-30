@@ -186,6 +186,7 @@ export function installGUI(app: App): GUI {
     invertTrace: false,
     autoRotate: false,
     debugElectrode: "(none)",
+    showAllElectrodes: false,
     brainScale: BrainHead.defaults.brainScale,
     brainPitch: BrainHead.defaults.brainPitch * DEG,
     electrodePitch: app.electrodeDefaults.pitch * DEG,
@@ -332,6 +333,10 @@ export function installGUI(app: App): GUI {
     .add(state, "mainsAmp", 0, 3, 0.05)
     .name("Hum power (×signal)")
     .onChange((v: number) => app.setMainsHum({ amplitude: v }));
+  debug
+    .add(state, "showAllElectrodes")
+    .name("Show all electrodes")
+    .onChange((v: boolean) => app.setShowAllElectrodes(v));
   // Debug-electrode selector is populated once electrode metadata is known.
   app.onElectrodesReady((names) => {
     debug

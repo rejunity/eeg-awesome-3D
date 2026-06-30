@@ -723,6 +723,11 @@ export class App {
     return vals.map((v) => v / scale);
   }
 
+  /** Debug: show all electrodes, even those not populated by the stream. */
+  setShowAllElectrodes(v: boolean): void {
+    this.electrodes?.setShowAll(v);
+  }
+
   /** Electrode colour palette. */
   setColorScheme(scheme: string): void {
     this.colorScheme = scheme;
