@@ -16,6 +16,7 @@ from collections.abc import Callable
 
 import numpy as np
 
+from ..channel_map import apply_channel_map
 from ..config import StreamConfig
 from ..models import EEGChunk, StreamMetadata
 from ..assets.electrodes_cgx import montage_for_channel_count
@@ -84,6 +85,13 @@ class LSLReceiver:
 
     # -- internals -----------------------------------------------------------
 
+    def _prepare_metadata(self, metadata: StreamMetadata) -> StreamMetadata:
+        """Remap raw labels to 10-20 names, then fill any remaining bare labels."""
+        # Apply the user channel map to the RAW labels first, so its keys match
+        # what the stream reports and remapped names aren't treated as "bare".
+        apply_channel_map(metadata, getattr(self.config, "channel_map", None))
+        return _annotate_metadata(metadata)
+
     def _resolve(self) -> DiscoveredStream | None:
         try:
             streams = discover_streams(timeout=self.config.resolve_timeout)
@@ -113,9 +121,9 @@ class LSLReceiver:
             # re-read metadata from there to get real channel names/types.
             try:
                 full_info = inlet.info(2.0)
-                metadata = _annotate_metadata(_metadata_from_info(full_info))
+                metadata = self._prepare_metadata(_metadata_from_info(full_info))
             except Exception:
-                metadata = _annotate_metadata(chosen.metadata)
+                metadata = self._prepare_metadata(chosen.metadata)
             self.metadata = metadata
             self._on_status("connected", True, metadata)
 

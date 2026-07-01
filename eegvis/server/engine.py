@@ -19,6 +19,7 @@ import time
 
 import numpy as np
 
+from ..channel_map import apply_channel_map
 from ..config import AppConfig
 from ..lsl.discovery import DiscoveredStream, LSLNotAvailable, discover_streams
 from ..lsl.receiver import LSLReceiver
@@ -108,6 +109,8 @@ class Engine:
 
     def _start_synthetic(self, message: str) -> None:
         self._synthetic = SyntheticStream(self.config.synthetic, start_time=time.monotonic())
+        # Honour the channel map for synthetic streams too (usually a no-op).
+        apply_channel_map(self._synthetic.metadata, self.config.stream.channel_map)
         self.mode = "synthetic"
         self._current_source = "synthetic"
         self.pipeline.configure(self._synthetic.metadata)

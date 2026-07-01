@@ -33,11 +33,19 @@ def _apply_overrides(
     no_browser: bool = False,
     host: str | None = None,
     port: int | None = None,
+    channel_map_file: str | None = None,
 ) -> AppConfig:
     if stream_type is not None:
         config.stream.type = stream_type
     if stream_name is not None:
         config.stream.name = stream_name
+    if channel_map_file is not None:
+        from .channel_map import resolve_channel_map
+
+        config.stream.channel_map_file = channel_map_file
+        config.stream.channel_map = resolve_channel_map(
+            config.stream.channel_map, channel_map_file
+        )
     if synthetic:
         config.stream.synthetic_fallback = True
     if no_browser:
@@ -58,6 +66,9 @@ def run(
     host: str = typer.Option(None, "--host", help="Bind host (default 127.0.0.1)."),
     port: int = typer.Option(None, "--port", help="Bind port (default 8765)."),
     config_path: Path = typer.Option(None, "--config", help="User config YAML override."),
+    channel_map: str = typer.Option(
+        None, "--channel-map", help="Channel-name remap file (YAML/JSON/CSV: raw->10-20)."
+    ),
 ) -> None:
     """Start the local server, data source, and (optionally) the browser."""
     import uvicorn
@@ -73,6 +84,7 @@ def run(
         no_browser=no_browser,
         host=host,
         port=port,
+        channel_map_file=channel_map,
     )
 
     url = f"http://{config.server.host}:{config.server.port}/"

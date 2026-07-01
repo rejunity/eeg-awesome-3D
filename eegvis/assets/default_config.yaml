@@ -22,6 +22,18 @@ stream:
   resolve_timeout: 5.0
   # Fall back to synthetic data if no stream is found (also set by --synthetic).
   synthetic_fallback: false
+  # Remap raw stream channel labels to standard 10-20/10-10 names so the 3D
+  # positions, region sort and per-lobe power all line up. Keys are the labels
+  # your stream reports (case/space-insensitive); values are canonical names.
+  # channel_map:
+  #   EEG1: Fp1
+  #   EEG2: Fp2
+  #   E29: Cz
+  # Or keep the map in a separate file (YAML/JSON object, or CSV/TSV rows
+  # "raw,canonical"); inline entries above override it. Also settable with
+  # `--channel-map FILE`. See eegvis/assets/channel_map.example.yaml.
+  channel_map: {}
+  channel_map_file: null
 
 processing:
   # Rate at which processed frames are broadcast to browsers.

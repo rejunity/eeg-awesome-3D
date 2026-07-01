@@ -39,6 +39,11 @@ class StreamConfig(BaseModel):
     prefer_name_contains: str | None = "cgx"
     resolve_timeout: float = 5.0
     synthetic_fallback: bool = False
+    # Remap raw stream channel labels -> standard 10-20/10-10 names. Inline map
+    # merged over an optional external file (YAML/JSON object, or CSV/TSV rows
+    # "raw,canonical"); inline entries win. Applied to every source's metadata.
+    channel_map: dict[str, str] = Field(default_factory=dict)
+    channel_map_file: str | None = None
 
 
 class ProcessorConfig(BaseModel):
@@ -130,4 +135,17 @@ def load_config(config_path: str | Path | None = None) -> AppConfig:
         user_text = Path(config_path).read_text(encoding="utf-8")
         user_data = yaml.safe_load(user_text) or {}
         data = _deep_merge(data, user_data)
-    return AppConfig.model_validate(data)
+    config = AppConfig.model_validate(data)
+    _resolve_channel_map(config)
+    return config
+
+
+def _resolve_channel_map(config: AppConfig) -> None:
+    """Fold ``stream.channel_map_file`` into ``stream.channel_map`` (inline wins)."""
+    from .channel_map import resolve_channel_map
+
+    stream = config.stream
+    if stream.channel_map or stream.channel_map_file:
+        stream.channel_map = resolve_channel_map(
+            stream.channel_map, stream.channel_map_file
+        )

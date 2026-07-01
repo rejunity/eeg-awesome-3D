@@ -1,0 +1,24 @@
+# Example channel-name remap: raw stream label -> standard 10-20/10-10 name.
+#
+# Use this when your acquisition stream reports non-standard channel labels
+# (e.g. "EEG1", "Ch07", vendor codes) so the 3D electrode positions, the region
+# row-sort and per-lobe power line up automatically.
+#
+# Matching is case- and whitespace-insensitive. When the target is a known
+# electrode the channel is also marked as EEG. Unlisted channels are left as-is.
+#
+# Point at it with:  python -m eegvis run --channel-map path/to/this.yaml
+# or in your config:  stream: { channel_map_file: path/to/this.yaml }
+#
+# A CSV/TSV form also works, one "raw,canonical" pair per line:
+#   EEG1,Fp1
+#   EEG2,Fp2
+
+EEG1: Fp1
+EEG2: Fp2
+EEG3: F7
+EEG4: F3
+EEG5: Fz
+EEG6: F4
+EEG7: F8
+EEG8: Cz
