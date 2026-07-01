@@ -250,6 +250,7 @@ export function installGUI(app: App): GUI {
     .add(state, "colorScheme", {
       "red-green": "red-green",
       "blue-yellow": "blue-yellow",
+      "red-yellow": "red-yellow",
       "black-white (absolute)": "black-white",
       "black-yellow (absolute)": "black-yellow",
     })

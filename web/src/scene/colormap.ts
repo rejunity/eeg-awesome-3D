@@ -16,13 +16,15 @@ export function redGreen(normalized: number, intensity = 1.0): Color {
 export type ColorScheme =
   | "red-green"
   | "blue-yellow"
+  | "red-yellow"
   | "black-white"
   | "black-yellow";
 
 /**
  * Electrode colour for a value in [-1, 1].
- *   red-green / blue-yellow: diverging, black-centred (0 = running mean);
- *     brightness encodes the signed deviation.
+ *   red-green / blue-yellow / red-yellow: diverging, black-centred (0 = running
+ *     mean); brightness encodes the signed deviation (negative -> first colour,
+ *     positive -> second).
  *   black-white / black-yellow (absolute): brightness from |value| (value =
  *     the signed source already divided by its reference scale, cross-channel
  *     std x Color SD); brightness = |value|^2.2, rendered grayscale or yellow.
@@ -38,6 +40,9 @@ export function electrodeColor(
   const v = Math.min(1, Math.max(-1, value));
   if (scheme === "blue-yellow") {
     return v >= 0 ? new Color(v, v, 0) : new Color(0, 0, -v);
+  }
+  if (scheme === "red-yellow") {
+    return v >= 0 ? new Color(v, v, 0) : new Color(-v, 0, 0);
   }
   return v >= 0 ? new Color(0, v, 0) : new Color(-v, 0, 0);
 }
