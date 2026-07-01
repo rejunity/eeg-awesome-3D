@@ -20,9 +20,29 @@ def _stream(name, type_="EEG", n=37, source="s"):
 
 
 def test_choose_prefers_cgx_when_unspecified():
+    # Equal channel counts -> the CGX name preference breaks the tie.
     streams = [_stream("Generic EEG"), _stream("CGX Quick32r")]
     chosen = choose_stream(streams, StreamConfig(prefer_name_contains="cgx"))
     assert chosen.metadata.name == "CGX Quick32r"
+
+
+def test_choose_picks_most_channels_by_default():
+    streams = [_stream("Small", n=8), _stream("Big cap", n=64), _stream("Mid", n=32)]
+    chosen = choose_stream(streams, StreamConfig())
+    assert chosen.metadata.name == "Big cap"
+
+
+def test_most_channels_beats_name_preference():
+    # A bigger non-CGX cap wins over a smaller CGX stream (channels dominate).
+    streams = [_stream("CGX Quick20r", n=19), _stream("Other EEG", n=64)]
+    chosen = choose_stream(streams, StreamConfig(prefer_name_contains="cgx"))
+    assert chosen.metadata.name == "Other EEG"
+
+
+def test_name_preference_breaks_channel_count_ties():
+    streams = [_stream("Other EEG", n=64), _stream("CGX cap", n=64)]
+    chosen = choose_stream(streams, StreamConfig(prefer_name_contains="cgx"))
+    assert chosen.metadata.name == "CGX cap"
 
 
 def test_choose_filters_by_name():

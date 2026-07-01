@@ -16,7 +16,8 @@ stream:
   type: EEG
   name: null
   source_id: null
-  # Prefer a stream whose name contains this substring when none is specified.
+  # Auto-pick default: among visible streams the one with the MOST channels wins.
+  # This substring only breaks ties (same channel count) toward a preferred name.
   prefer_name_contains: cgx
   # Seconds to wait for a stream before falling back / reporting.
   resolve_timeout: 5.0

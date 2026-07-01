@@ -36,6 +36,8 @@ class StreamConfig(BaseModel):
     type: str = "EEG"
     name: str | None = None
     source_id: str | None = None
+    # Auto-pick default picks the stream with the most channels; this substring
+    # only breaks ties (equal channel count) toward a preferred-name match.
     prefer_name_contains: str | None = "cgx"
     resolve_timeout: float = 5.0
     synthetic_fallback: bool = False

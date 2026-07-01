@@ -99,10 +99,14 @@ def choose_stream(
     if not candidates:
         return None
 
-    # Prefer a CGX-like stream when the user didn't pin a specific name.
-    if not config.name and config.prefer_name_contains:
-        for s in candidates:
-            if config.prefer_name_contains.lower() in s.metadata.name.lower():
-                return s
+    # Auto-pick default: the stream with the MOST channels wins (a full EEG cap
+    # over a smaller / auxiliary stream). Ties break toward a preferred-name (CGX)
+    # match, then discovery order. A user-pinned name disables the name preference.
+    prefer = "" if config.name else (config.prefer_name_contains or "").lower()
 
-    return candidates[0]
+    def _key(item: tuple[int, DiscoveredStream]) -> tuple[int, int, int]:
+        idx, s = item
+        prefer_match = 1 if prefer and prefer in s.metadata.name.lower() else 0
+        return (s.metadata.channel_count, prefer_match, -idx)
+
+    return max(enumerate(candidates), key=_key)[1]
