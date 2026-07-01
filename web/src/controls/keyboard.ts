@@ -1,4 +1,4 @@
-import type { App, DisplayMode } from "../app";
+import type { App, DisplayMode, ElectrodeSort } from "../app";
 
 // Bandpass band by key: letters (mnemonic) + 0 = none.
 const BAND_KEYS: Record<string, string> = {
@@ -8,6 +8,17 @@ const BAND_KEYS: Record<string, string> = {
   a: "alpha",
   b: "beta",
   g: "gamma",
+};
+
+// Electrode row-sort for the top panel: z = default, then region initials.
+const SORT_KEYS: Record<string, ElectrodeSort> = {
+  z: "default",
+  l: "left",
+  r: "right",
+  c: "central",
+  o: "occipital",
+  f: "frontal",
+  p: "parietal",
 };
 
 // Top display panels selected sequentially by the number keys 1..N.
@@ -27,6 +38,8 @@ const TAB_ORDER: Exclude<DisplayMode, "none">[] = [
  *   1–7       : select the panel sequentially (trace/power/raw/bands/fft/
  *               features/asymmetry)
  *   a/b/g/d/t : bandpass alpha/beta/gamma/delta/theta;  0 / Esc = none
+ *   z/l/r/c/o/f/p : electrode row-sort (default/left/right/central/
+ *                   occipital/frontal/parietal)
  *   ↑/↓       : head cutaway / transparency
  */
 export function installKeyboard(app: App): void {
@@ -61,8 +74,15 @@ export function installKeyboard(app: App): void {
           if (idx < TAB_ORDER.length) app.toggleDisplay(TAB_ORDER[idx]);
           break;
         }
+        const key = e.key.toLowerCase();
+        // Electrode row-sort for the top panel (z/l/r/c/o/f/p).
+        const sort = SORT_KEYS[key];
+        if (sort) {
+          app.setElectrodeSort(sort);
+          break;
+        }
         // Letters (+ 0) select the bandpass band.
-        const band = BAND_KEYS[e.key.toLowerCase()];
+        const band = BAND_KEYS[key];
         if (band) app.setBand(band);
       }
     }

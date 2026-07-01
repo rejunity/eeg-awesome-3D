@@ -52,7 +52,8 @@ export class EEGTraceTexture {
     this.overlap = Math.max(0, o);
   }
 
-  private clear(): void {
+  /** Wipe the strip and force a label redraw (e.g. on reorder or invert). */
+  clear(): void {
     this.ctx.fillStyle = this.invert ? "#ffffff" : "#05070d";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     this.labelKey = ""; // force a label redraw after clearing

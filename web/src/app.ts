@@ -25,6 +25,55 @@ export type DisplayMode =
   | "features"
   | "asymmetry";
 
+// Row ordering for the per-electrode top panels (trace/power/raw/fft). "default"
+// keeps stream order; the rest bring the named region's electrodes to the top.
+export type ElectrodeSort =
+  | "default"
+  | "left"
+  | "right"
+  | "central"
+  | "occipital"
+  | "frontal"
+  | "parietal";
+
+type Lobe = "frontal" | "central" | "parietal" | "occipital" | "other";
+type Hemi = "left" | "right" | "mid";
+
+/** Classify a 10-20 electrode label into a lobe + hemisphere for row sorting. */
+function classifyElectrode(name: string): { lobe: Lobe; hemi: Hemi } {
+  const s = name.trim().toUpperCase();
+  const num = s.match(/(\d+)$/);
+  const hemi: Hemi = !num ? "mid" : Number(num[1]) % 2 ? "left" : "right";
+  const prefix = s.replace(/\d+$/, "").replace(/Z$/, ""); // letters, drop midline Z
+  let lobe: Lobe = "other";
+  if (prefix.startsWith("PO") || prefix.startsWith("O") || prefix.startsWith("I"))
+    lobe = "occipital";
+  else if (prefix.startsWith("CP") || prefix.startsWith("TP") || prefix.startsWith("P"))
+    lobe = "parietal";
+  else if (prefix.startsWith("F") || prefix.startsWith("A")) lobe = "frontal"; // F/Fp/FC/FT/AF
+  else if (prefix.startsWith("C") || prefix.startsWith("T")) lobe = "central"; // C/Cz/T7/T8
+  return { lobe, hemi };
+}
+
+/**
+ * Permutation of channel indices for a sort: the selected region's electrodes
+ * first (stable within groups), everything else after in stream order.
+ */
+export function electrodeOrder(names: string[], sort: ElectrodeSort): number[] {
+  const idx = names.map((_, i) => i);
+  if (sort === "default") return idx;
+  const inRegion = (name: string): boolean => {
+    const { lobe, hemi } = classifyElectrode(name);
+    if (sort === "left" || sort === "right") return hemi === sort;
+    return lobe === sort;
+  };
+  return idx.sort((a, b) => {
+    const ra = inRegion(names[a]) ? 0 : 1;
+    const rb = inRegion(names[b]) ? 0 : 1;
+    return ra - rb || a - b; // stable: preserve stream order within each group
+  });
+}
+
 // Fraction of screen height the 2D panel occupies at the top.
 const PANEL_FRACTION = 0.25;
 
@@ -65,6 +114,8 @@ export class App {
   private latestFrame: EEGFramePayload | null = null;
   private autoRotate = false;
   private displayMode: DisplayMode = "trace";
+  // Row ordering for the per-electrode top panels (default = stream order).
+  private electrodeSort: ElectrodeSort = "default";
 
   // Frames received but not yet rendered; the render loop drains them so it can
   // skip stale frames for the 3D view when behind.
@@ -609,10 +660,16 @@ export class App {
     }
     this.pendingFrames.length = 0;
 
+    // Row ordering for the per-electrode panels (brings a region to the top).
+    const order = electrodeOrder(this.channels, this.electrodeSort);
+    const names = order.map((k) => this.channels[k]);
+    const sort = <T,>(arr: T[]): T[] => order.map((k) => arr[k]);
+    this.bands.setChannelOrder(this.electrodeSort === "default" ? null : order);
+
     // 2) Raw trace (X) at the source rate.
     for (const row of this.resampler.drain(nowMs)) {
       const rawD = row.map((x, i) => clampZ(this.rawStats, this.channels[i], x));
-      this.rawTrace.push(rawD, this.channels);
+      this.rawTrace.push(sort(rawD), names);
     }
 
     // 3) Filtered trace (Z) at the source rate. == raw when no filter is on.
@@ -620,7 +677,7 @@ export class App {
     const a = 0.02; // ~0.2 s power-envelope time constant
     for (const row of this.filteredResampler.drain(nowMs)) {
       const d = row.map((x, i) => clampZ(this.filteredStats, this.channels[i], x));
-      this.trace.push(d, this.channels);
+      this.trace.push(sort(d), names);
       this.lastFilteredRow = row;
       if (!this.powerEma || this.powerEma.length !== row.length) {
         this.powerEma = row.map((x) => x * x);
@@ -632,7 +689,7 @@ export class App {
       const pd = this.powerEma.map((p, i) =>
         clampZ(this.powerTraceStats, this.channels[i], p),
       );
-      this.powerTrace.push(pd, this.channels);
+      this.powerTrace.push(sort(pd), names);
     }
 
     // 4) Electrodes: colour by the selected source.
@@ -726,6 +783,24 @@ export class App {
   /** Debug: show all electrodes, even those not populated by the stream. */
   setShowAllElectrodes(v: boolean): void {
     this.electrodes?.setShowAll(v);
+  }
+
+  /**
+   * Set the row ordering for the per-electrode top panels (trace/power/raw/fft):
+   * "default" keeps stream order, the rest bring that region to the top. Clears
+   * the scrolling traces so the reordered rows don't mix with stale history.
+   */
+  setElectrodeSort(sort: ElectrodeSort): void {
+    if (sort === this.electrodeSort) return;
+    this.electrodeSort = sort;
+    if (this.guiState) this.guiState.electrodeSort = sort;
+    this.trace.clear();
+    this.powerTrace.clear();
+    this.rawTrace.clear();
+  }
+
+  get electrodeSortMode(): ElectrodeSort {
+    return this.electrodeSort;
   }
 
   /** Electrode colour palette. */

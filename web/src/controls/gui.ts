@@ -187,6 +187,7 @@ export function installGUI(app: App): GUI {
     autoRotate: false,
     debugElectrode: "(none)",
     showAllElectrodes: false,
+    electrodeSort: "default",
     brainScale: BrainHead.defaults.brainScale,
     brainPitch: BrainHead.defaults.brainPitch * DEG,
     electrodePitch: app.electrodeDefaults.pitch * DEG,
@@ -358,6 +359,19 @@ export function installGUI(app: App): GUI {
     .add(state, "labels")
     .name("Electrode labels")
     .onChange((v: boolean) => app.electrodes.setLabelsVisible(v));
+  gui
+    .add(state, "electrodeSort", {
+      "default (z)": "default",
+      "left (l)": "left",
+      "right (r)": "right",
+      "central (c)": "central",
+      "occipital (o)": "occipital",
+      "frontal (f)": "frontal",
+      "parietal (p)": "parietal",
+    })
+    .name("Sort rows")
+    .listen()
+    .onChange((v: string) => app.setElectrodeSort(v as any));
   gui
     .add(state, "invertTrace")
     .name("Invert trace")

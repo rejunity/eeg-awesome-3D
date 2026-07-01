@@ -30,6 +30,9 @@ export class BandTexture {
   // Black point: normalized energy below this maps to 0 (true black), so the
   // noise floor / out-of-band bins don't show as a constant bias colour.
   private blackPoint = 0.04;
+  // Optional channel-row ordering (from the electrode-sort mode); null = stream
+  // order. Only the per-electrode FFT panel honours it.
+  private channelOrder: number[] | null = null;
 
   // Subtract the black point, rescale, then gamma-expand the remainder.
   private contrast(v: number): number {
@@ -59,6 +62,11 @@ export class BandTexture {
 
   setMode(mode: BandMode): void {
     this.mode = mode;
+  }
+
+  /** Row order for the FFT panel (indices into the frame's channels); null = as-is. */
+  setChannelOrder(order: number[] | null): void {
+    this.channelOrder = order;
   }
 
   /** Match the canvas backing-store to its displayed pixel size (no stretch). */
@@ -98,16 +106,23 @@ export class BandTexture {
     const cellW = plotW / nBins;
     const cellH = height / nCh;
 
+    // Row order: apply the electrode-sort permutation, keeping only valid rows.
+    const rows = (this.channelOrder ?? values.map((_, i) => i)).filter(
+      (k) => k >= 0 && k < nCh,
+    );
+    const labels = rows.map((k) => frame.channels[k] ?? String(k));
+
     let max = 1e-9;
     for (const row of values) for (const v of row) if (v > max) max = v;
 
-    for (let i = 0; i < nCh; i++) {
+    for (let i = 0; i < rows.length; i++) {
+      const src = values[rows[i]];
       for (let f = 0; f < nBins; f++) {
-        ctx.fillStyle = `#${heat(this.contrast((values[i][f] ?? 0) / max)).getHexString()}`;
+        ctx.fillStyle = `#${heat(this.contrast((src[f] ?? 0) / max)).getHexString()}`;
         ctx.fillRect(GUTTER + f * cellW, i * cellH, Math.max(1, cellW), cellH);
       }
     }
-    this.drawRowLabels(frame.channels, cellH);
+    this.drawRowLabels(labels, cellH);
     this.drawFreqAxis(fft.freqs, GUTTER, plotW);
   }
 
