@@ -67,11 +67,15 @@ export class Electrodes {
   private debugElectrode: string | null = null;
   private colorScheme: ColorScheme = "blue-yellow";
   private shape: ElectrodeShape = "sphere";
-  // Debug: when true, electrodes absent from the stream are shown with a dim
-  // neutral glow instead of being left black/invisible.
+  // Debug: when true, electrodes absent from the stream are still shown (with a
+  // dim neutral glow); when false they are hidden entirely.
   private showAll = false;
-  // Keys of the nodes populated by the most recent frame's channels.
+  private labelsVisible = true;
+  // Keys of the nodes populated by the most recent frame's channels, and whether
+  // any frame has been seen yet (before that, the populated set is unknown so
+  // all electrodes are shown).
   private activeKeys = new Set<string>();
+  private haveFrame = false;
 
   private readonly sphereGeo = new SphereGeometry(0.04, 16, 12);
   private readonly coneGeo = new ConeGeometry(0.045, CONE_HEIGHT, 20);
@@ -123,25 +127,37 @@ export class Electrodes {
 
   /**
    * Debug: show every electrode, including those not populated by the stream.
-   * Unpopulated markers get a dim neutral glow so all 10-10 sites are visible;
-   * turning it off restores them to black. Applied immediately to the inactive
-   * set so it works even when no frames are arriving.
+   * Off (default) hides the unpopulated sites entirely; on shows them with a dim
+   * neutral glow. Applied immediately so it works even when no frames arrive.
    */
   setShowAll(v: boolean): void {
     this.showAll = v;
-    for (const [key, node] of this.nodes) {
-      if (!this.activeKeys.has(key)) this.paintInactive(node);
-    }
+    this.refreshVisibility();
   }
 
-  /** Paint a node not driven by the stream: dim glow if showAll, else black. */
-  private paintInactive(node: ElectrodeNode): void {
-    const isolated =
-      this.debugElectrode !== null && normalize(node.name) !== this.debugElectrode;
-    const glow = this.showAll && !isolated ? INACTIVE_GLOW : BLACK;
-    node.material.emissive.copy(glow);
-    node.material.emissiveIntensity = 1.0;
-    node.light.intensity = 0; // unpopulated markers don't cast coloured light
+  /** Whether a node should be rendered at all under the current settings. */
+  private isShown(key: string): boolean {
+    // Until the first frame the populated set is unknown, so show everything.
+    return this.showAll || !this.haveFrame || this.activeKeys.has(key);
+  }
+
+  /**
+   * Reconcile mesh/label visibility with the populated set + toggles, and repaint
+   * the unpopulated markers (dim glow when shown, else black).
+   */
+  private refreshVisibility(): void {
+    for (const [key, node] of this.nodes) {
+      const shown = this.isShown(key);
+      node.mesh.visible = shown;
+      node.label.visible = shown && this.labelsVisible;
+      if (!this.activeKeys.has(key)) {
+        const isolated =
+          this.debugElectrode !== null && normalize(node.name) !== this.debugElectrode;
+        node.material.emissive.copy(shown && !isolated ? INACTIVE_GLOW : BLACK);
+        node.material.emissiveIntensity = 1.0;
+        node.light.intensity = 0; // unpopulated markers don't cast coloured light
+      }
+    }
   }
 
   setColorScheme(scheme: ColorScheme): void {
@@ -150,7 +166,8 @@ export class Electrodes {
 
   /** Show/hide the floating electrode-name labels. */
   setLabelsVisible(v: boolean): void {
-    for (const n of this.nodes.values()) n.label.visible = v;
+    this.labelsVisible = v;
+    this.refreshVisibility();
   }
 
   /** Scale the floating electrode-name labels (1 = default size, 2:1 aspect). */
@@ -243,6 +260,7 @@ export class Electrodes {
    * light intensity is constant.
    */
   update(channels: string[], normalized: number[]): void {
+    this.haveFrame = true;
     this.activeKeys.clear();
     for (let i = 0; i < channels.length; i++) {
       const key = normalize(channels[i]);
@@ -262,10 +280,8 @@ export class Electrodes {
       node.light.color.copy(color);
       node.light.intensity = this.indicatorsVisible && !isolated ? 1 : 0;
     }
-    // Electrodes the stream doesn't populate: dim glow if "show all" is on.
-    for (const [key, node] of this.nodes) {
-      if (!this.activeKeys.has(key)) this.paintInactive(node);
-    }
+    // Hide (or dim-glow, if "show all") the electrodes the stream doesn't drive.
+    this.refreshVisibility();
   }
 
   get channelNames(): string[] {
