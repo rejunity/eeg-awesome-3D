@@ -25,14 +25,56 @@ stream:
   # Remap raw stream channel labels to standard 10-20/10-10 names so the 3D
   # positions, region sort and per-lobe power all line up. Keys are the labels
   # your stream reports (case/space-insensitive); values are canonical names.
-  # channel_map:
-  #   EEG1: Fp1
-  #   EEG2: Fp2
-  #   E29: Cz
-  # Or keep the map in a separate file (YAML/JSON object, or CSV/TSV rows
-  # "raw,canonical"); inline entries above override it. Also settable with
-  # `--channel-map FILE`. See eegvis/assets/channel_map.example.yaml.
-  channel_map: {}
+  # Only labels that match are touched, so this is a no-op for streams that
+  # already use standard names (e.g. the bundled synthetic / CGX caps).
+  #
+  # Default below maps a generic 41-channel stream (ch0..ch40) onto a symmetric,
+  # well-distributed 10-10 montage (frontal -> occipital, both hemispheres).
+  # Order is arbitrary; each ch maps to a unique electrode. Edit/replace to match
+  # your device, or keep the map in a separate file and point channel_map_file /
+  # `--channel-map FILE` at it. See eegvis/assets/channel_map.example.yaml.
+  channel_map:
+    ch0: Fp1
+    ch1: Fpz
+    ch2: Fp2
+    ch3: AF7
+    ch4: AF3
+    ch5: AFz
+    ch6: AF4
+    ch7: AF8
+    ch8: F7
+    ch9: F3
+    ch10: Fz
+    ch11: F4
+    ch12: F8
+    ch13: FC5
+    ch14: FC1
+    ch15: FCz
+    ch16: FC2
+    ch17: FC6
+    ch18: T7
+    ch19: C3
+    ch20: Cz
+    ch21: C4
+    ch22: T8
+    ch23: CP5
+    ch24: CP1
+    ch25: CPz
+    ch26: CP2
+    ch27: CP6
+    ch28: P7
+    ch29: P3
+    ch30: Pz
+    ch31: P4
+    ch32: P8
+    ch33: PO7
+    ch34: PO3
+    ch35: POz
+    ch36: PO4
+    ch37: PO8
+    ch38: O1
+    ch39: Oz
+    ch40: O2
   channel_map_file: null
 
 processing:

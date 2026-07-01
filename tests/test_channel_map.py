@@ -86,4 +86,19 @@ def test_load_config_folds_file_into_inline_map(tmp_path):
         encoding="utf-8",
     )
     config = load_config(cfg)
-    assert config.stream.channel_map == {"EEG1": "Fp1", "EEG2": "F7"}
+    # File provides EEG1; inline overrides EEG2. (The bundled default also
+    # contributes ch* entries, so assert the folded keys rather than equality.)
+    assert config.stream.channel_map["EEG1"] == "Fp1"
+    assert config.stream.channel_map["EEG2"] == "F7"
+
+
+def test_default_config_maps_ch0_to_ch40_uniquely():
+    """The bundled default remaps a generic ch0..ch40 stream to unique 10-10 names."""
+    from eegvis.assets.electrodes_cgx import ELECTRODES_BY_NAME
+
+    cmap = load_config(None).stream.channel_map
+    for i in range(41):
+        assert f"ch{i}" in cmap, f"ch{i} missing from default channel_map"
+    targets = [cmap[f"ch{i}"] for i in range(41)]
+    assert len(set(targets)) == 41, "default ch0..ch40 targets must be unique"
+    assert all(t in ELECTRODES_BY_NAME for t in targets), "targets must be real electrodes"
